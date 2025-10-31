@@ -11,38 +11,26 @@ import {
 const HomePage = () => {
   const features = [
     {
-      name: 'Real-time Face Detection',
-      description: 'Advanced BlazeFace model for accurate face detection with <50ms inference time',
-      icon: EyeIcon,
-      status: 'active'
-    },
-    {
-      name: 'Head Pose Estimation',
-      description: 'Monitor head movements and detect suspicious behavior patterns',
-      icon: CpuChipIcon,
-      status: 'active'
-    },
-    {
-      name: 'Eye Gaze Tracking',
-      description: 'Track eye movements to detect looking away from screen',
-      icon: EyeIcon,
-      status: 'active'
-    },
-    {
-      name: 'Object Detection',
-      description: 'YOLOv8n model to detect phones, books, and other suspicious objects',
+      name: 'YOLOv8n Detection',
+      description: 'Single model for face/person and object detections',
       icon: ShieldCheckIcon,
       status: 'active'
     },
     {
-      name: 'Behavior Analysis',
-      description: 'AI-powered behavior profiling and anomaly detection',
-      icon: ChartBarIcon,
+      name: 'One-shot ID Verification',
+      description: 'Verify identity from one enrollment photo (local pHash + histogram)',
+      icon: EyeIcon,
+      status: 'active'
+    },
+    {
+      name: 'Whisper Detection',
+      description: 'Heuristic audio detector for low-volume speech (WebAudio)',
+      icon: CpuChipIcon,
       status: 'active'
     },
     {
       name: 'Edge Optimization',
-      description: 'Optimized for edge devices with limited resources',
+      description: 'Runs fully in-browser with ONNX Runtime Web (WASM)',
       icon: CpuChipIcon,
       status: 'active'
     }

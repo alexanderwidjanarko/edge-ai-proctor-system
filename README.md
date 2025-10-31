@@ -8,14 +8,10 @@ Edge Proctor System is an advanced online exam proctoring solution designed spec
 
 ## Key Features
 
-### 🤖 AI/ML Modules
-- **Face Detection**: BlazeFace model for accurate face detection (<50ms inference)
-- **Head Pose Estimation**: Monitor head movements and detect suspicious behavior
-- **Eye Gaze Tracking**: Track eye movements to detect looking away from screen
-- **Object Detection**: YOLOv8n model to detect phones, books, and suspicious objects
-- **Hand-Object Interaction**: Monitor hand movements and object interactions
-- **Temporal Analysis**: GRU-based anomaly detection for behavior patterns
-- **Behavior Profiling**: AI-powered behavior baseline and deviation detection
+### 🤖 AI/ML Modules (Simplified)
+- **YOLOv8n Detection**: Single model for face/person/objects (ONNX Runtime Web)
+- **One-shot ID Verification**: pHash + color histogram against one enrollment photo
+- **Whisper Detection**: WebAudio-based heuristic for low-volume speech
 
 ### ⚡ Performance Targets
 - **Inference Time**: <50ms per frame
@@ -29,10 +25,9 @@ Edge Proctor System is an advanced online exam proctoring solution designed spec
 - **Frontend**: React 18 + TypeScript
 - **Build Tool**: Vite
 - **Styling**: Tailwind CSS
-- **ML Runtime**: ONNX Runtime Web
-- **Computer Vision**: MediaPipe
+- **ML Runtime**: ONNX Runtime Web (WASM)
 - **State Management**: Zustand
-- **Storage**: IndexedDB
+- **Storage**: localStorage / IndexedDB
 - **PWA**: Workbox
 - **Testing**: Vitest + Testing Library
 
@@ -121,6 +116,12 @@ After exam completion, view detailed reports including:
 - Sound alerts
 - Email notifications
 - Severity levels
+
+## Models and Enrollment
+
+- Place YOLOv8n ONNX model at `public/models/yolov8n.onnx` (optional to boot; detection no-ops if missing).
+- Put your enrollment photo at `public/enrollment/Foto_Nathan.jpg` to auto-load from Settings, or upload manually on Settings → Security.
+- Enrollment is saved locally under key `proctor:enrollment` (cropped PNG + pHash + histogram).
 
 ## API Reference
 
