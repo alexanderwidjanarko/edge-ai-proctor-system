@@ -82,11 +82,22 @@
                     </div>
         <div class="card" style="margin-top:16px">
           <h3>⚡ Performance</h3>
-          <div class="grid-2">
-            <div class="metric"><div class="v" id="inf">--</div><div>Inference Time</div></div>
-            <div class="metric"><div class="v" id="fps">--</div><div>FPS</div></div>
-            <div class="metric"><div class="v" id="cpu">--</div><div>CPU Usage</div></div>
-            <div class="metric"><div class="v" id="mem">--</div><div>Memory</div></div>
+          <div class="grid-2" style="grid-template-columns: repeat(3, 1fr);">
+            <div class="metric">
+              <div class="v" id="inf">--</div>
+              <div>Inference Time</div>
+              <canvas id="infChart" style="width: 100%; height: 60px; margin-top: 8px; border-radius: 4px; background: #f8fafc;"></canvas>
+            </div>
+            <div class="metric">
+              <div class="v" id="fps">--</div>
+              <div>FPS</div>
+              <canvas id="fpsChart" style="width: 100%; height: 60px; margin-top: 8px; border-radius: 4px; background: #f8fafc;"></canvas>
+            </div>
+            <div class="metric">
+              <div class="v" id="cpu">--</div>
+              <div>CPU Usage</div>
+              <canvas id="cpuChart" style="width: 100%; height: 60px; margin-top: 8px; border-radius: 4px; background: #f8fafc;"></canvas>
+            </div>
                 </div>
             </div>
         <div class="card" style="margin-top:16px">
@@ -94,6 +105,24 @@
           <div class="status"><span id="modelStatusText">YOLOv8n Detection</span><span class="dot" id="yoloStatus"></span></div>
           <div class="status" style="margin-top:8px"><span>Identity Verification</span><span class="dot" id="identityStatus"></span></div>
           <div class="status" style="margin-top:8px"><span>Whisper Detection</span><span class="dot" id="whisperStatus"></span></div>
+                    </div>
+        <div class="card" style="margin-top:16px">
+          <h3>🧪 Performance Testing Mode</h3>
+          <div style="margin-bottom:12px;padding:12px;background:#fff7ed;border-radius:8px;border-left:4px solid #f59e0b">
+            <div style="font-size:13px;color:#92400e">
+              <strong>Testing Mode:</strong> Akan test YOLO (1 menit) lalu COCO SSD (1 menit). Data akan direkam setiap 1 detik dan di-generate ke CSV.
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <button class="btn btn-primary" id="startTestBtn" style="flex:1">Start Testing</button>
+            <button class="btn btn-danger" id="stopTestBtn" disabled style="flex:1">Stop Testing</button>
+          </div>
+          <div id="testStatus" style="padding:12px;background:#f8fafc;border-radius:8px;font-size:13px;color:#64748b">
+            <div><strong>Status:</strong> <span id="testStatusText">Ready</span></div>
+            <div style="margin-top:4px"><strong>Current Model:</strong> <span id="testModelText">-</span></div>
+            <div style="margin-top:4px"><strong>Elapsed Time:</strong> <span id="testElapsedText">0s</span></div>
+            <div style="margin-top:4px"><strong>Data Points:</strong> <span id="testDataPoints">0</span></div>
+          </div>
                     </div>
         <div class="card" style="margin-top:16px">
           <h3>🎤 Audio Whisper Detection</h3>
@@ -142,16 +171,29 @@
       let fpsCounter = { frames: 0, lastTime: 0, fps: 0 };
       let inferenceTimes = [];
       
+      // Chart data history (keep last 50 points for smooth visualization)
+      let infChartData = [];
+      let fpsChartData = [];
+      let cpuChartData = [];
+      const maxChartPoints = 50;
+      
+      // Testing mode variables
+      let isTestingMode = false;
+      let testingData = {
+        yolo: [],
+        coco: []
+      };
+      let testStartTime = null;
+      let testCurrentModel = null;
+      let testModelStartTime = null;
+      let testRecordingInterval = null;
+      let testModelSwitchTimeout = null;
+      
       // CPU Usage tracking using Performance API
       let cpuUsageTracker = {
         lastCpuTime: 0,
         lastWallTime: 0,
         usage: 0,
-        samples: []
-      };
-      
-      // Memory tracking
-      let memoryTracker = {
         samples: []
       };
       
@@ -1127,6 +1169,11 @@
           const infEl = document.getElementById('inf');
           if(infEl) infEl.textContent = avgInferenceTime.toFixed(1) + 'ms';
           
+          // Update inference time chart
+          if(inferenceTime > 0) {
+            updateChart('infChart', inferenceTime, infChartData, Math.max(...inferenceTimes) * 1.5 || 1000, '#3b82f6');
+          }
+          
           // Update FPS
           const now = performance.now();
           fpsCounter.frames++;
@@ -1137,11 +1184,11 @@
             const fpsEl = document.getElementById('fps');
             if(fpsEl) fpsEl.textContent = fpsCounter.fps;
             
+            // Update FPS chart
+            updateChart('fpsChart', fpsCounter.fps, fpsChartData, 30, '#22c55e');
+            
             // Update CPU Usage
             updateCPUUsage(now);
-            
-            // Update Memory Usage
-            updateMemoryUsage();
           }
           
           // Track CPU usage per detection
@@ -2504,41 +2551,338 @@
           const cpuEl = document.getElementById('cpu');
           if(cpuEl){
             cpuEl.textContent = avgCpu.toFixed(1) + '%';
+            // Update CPU chart
+            updateChart('cpuChart', avgCpu, cpuChartData, 100, '#f59e0b');
           }
         }
       }
       
-      function updateMemoryUsage(){
-        // Check if performance.memory is available (Chrome only)
-        if(performance.memory){
-          const usedMB = performance.memory.usedJSHeapSize / (1024 * 1024);
-          
-          memoryTracker.samples.push(usedMB);
-          if(memoryTracker.samples.length > 30) memoryTracker.samples.shift();
-          
-          // Calculate average - optimized calculation
-          let sum = 0;
-          for(let i = 0; i < memoryTracker.samples.length; i++){
-            sum += memoryTracker.samples[i];
-          }
-          const avgMem = memoryTracker.samples.length > 0 ? sum / memoryTracker.samples.length : usedMB;
-          
-          const memEl = document.getElementById('mem');
-          if(memEl){
-            memEl.textContent = avgMem.toFixed(1) + 'MB';
-          }
-        } else {
-          // Fallback: estimate based on detections
-          const memEl = document.getElementById('mem');
-          if(memEl){
-            memEl.textContent = 'N/A';
-          }
-        }
-      }
-      
-      // Initialize CPU/Memory tracking
+      // Initialize CPU tracking
       updateCPUUsage(performance.now());
-      updateMemoryUsage();
+      
+      // ==================== PERFORMANCE TESTING MODE ====================
+      
+      // Function to record current metrics
+      function recordTestData(modelName) {
+        if(!isTestingMode) return;
+        
+        const elapsed = Math.floor((Date.now() - testStartTime) / 1000);
+        const inferenceTime = inferenceTimes.length > 0 ? inferenceTimes[inferenceTimes.length - 1] : 0;
+        const avgInferenceTime = inferenceTimes.length > 0 ? 
+          inferenceTimes.reduce((a, b) => a + b, 0) / inferenceTimes.length : 0;
+        const fps = fpsCounter.fps || 0;
+        const cpuUsage = cpuUsageTracker.usage || 0;
+        
+        const dataPoint = {
+          timestamp: new Date().toISOString(),
+          elapsedSeconds: elapsed,
+          inferenceTime: inferenceTime,
+          avgInferenceTime: avgInferenceTime,
+          fps: fps,
+          cpuUsage: cpuUsage
+        };
+        
+        if(modelName === 'yolo') {
+          testingData.yolo.push(dataPoint);
+        } else if(modelName === 'coco') {
+          testingData.coco.push(dataPoint);
+        }
+        
+        // Update UI
+        const dataPointsEl = document.getElementById('testDataPoints');
+        if(dataPointsEl) {
+          const totalPoints = testingData.yolo.length + testingData.coco.length;
+          dataPointsEl.textContent = totalPoints;
+        }
+      }
+      
+      // Function to switch model during testing
+      async function switchTestModel(modelName) {
+        if(!isTestingMode) return;
+        
+        log(`🔄 Testing: Switching to ${modelName === 'yolo' ? 'YOLOv8n' : 'COCO SSD'}...`);
+        
+        // Stop detection temporarily
+        if(detectionInterval) {
+          clearInterval(detectionInterval);
+          detectionInterval = null;
+        }
+        
+        // Switch model
+        await selectModel(modelName === 'yolo' ? 'yolo' : 'cocossd');
+        
+        // Update UI
+        const modelTextEl = document.getElementById('testModelText');
+        if(modelTextEl) {
+          modelTextEl.textContent = modelName === 'yolo' ? 'YOLOv8n' : 'COCO SSD';
+        }
+        
+        testCurrentModel = modelName;
+        testModelStartTime = Date.now();
+        
+        // Wait a bit for model to load and resume detection
+        setTimeout(() => {
+          if(video && video.videoWidth > 0 && isTestingMode) {
+            // Detection will resume automatically via existing mechanisms
+            log(`✅ Testing: ${modelName === 'yolo' ? 'YOLOv8n' : 'COCO SSD'} ready, detection resumed`);
+          }
+        }, 500);
+      }
+      
+      // Function to generate CSV from data
+      function generateCSV(data, modelName) {
+        const headers = ['timestamp', 'elapsed_seconds', 'inference_time_ms', 'avg_inference_time_ms', 'fps', 'cpu_usage_percent'];
+        const rows = [headers.join(',')];
+        
+        for(const point of data) {
+          const row = [
+            point.timestamp,
+            point.elapsedSeconds,
+            point.inferenceTime.toFixed(2),
+            point.avgInferenceTime.toFixed(2),
+            point.fps,
+            point.cpuUsage.toFixed(2)
+          ];
+          rows.push(row.join(','));
+        }
+        
+        return rows.join('\n');
+      }
+      
+      // Function to download CSV
+      function downloadCSV(csvContent, filename) {
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        
+        link.setAttribute('href', url);
+        link.setAttribute('download', filename);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+      
+      // Start testing mode
+      async function startTesting() {
+        if(isTestingMode) return;
+        
+        log('🧪 Starting Performance Testing Mode...');
+        addAlert('🧪 Performance Testing Mode Started - YOLO (1 min) → COCO SSD (1 min)');
+        
+        // Reset data
+        testingData.yolo = [];
+        testingData.coco = [];
+        isTestingMode = true;
+        testStartTime = Date.now();
+        testCurrentModel = 'yolo';
+        testModelStartTime = Date.now();
+        
+        // Update UI
+        const startTestBtn = document.getElementById('startTestBtn');
+        const stopTestBtn = document.getElementById('stopTestBtn');
+        const statusTextEl = document.getElementById('testStatusText');
+        const modelTextEl = document.getElementById('testModelText');
+        const elapsedTextEl = document.getElementById('testElapsedText');
+        const dataPointsEl = document.getElementById('testDataPoints');
+        
+        if(startTestBtn) startTestBtn.disabled = true;
+        if(stopTestBtn) stopTestBtn.disabled = false;
+        if(statusTextEl) statusTextEl.textContent = 'Testing...';
+        if(modelTextEl) modelTextEl.textContent = 'YOLOv8n';
+        if(dataPointsEl) dataPointsEl.textContent = '0';
+        
+        // Ensure camera is running
+        if(!video || video.videoWidth === 0) {
+          log('⚠️ Testing: Camera not running. Starting camera...');
+          await requestCameraPermission();
+          await startCamera();
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for camera to initialize
+        }
+        
+        // Ensure YOLO model is loaded
+        if(!ortSession && currentModelType !== 'yolo') {
+          await selectModel('yolo');
+        } else if(currentModelType !== 'yolo') {
+          await selectModel('yolo');
+        }
+        
+        // Start recording data every 1 second
+        testRecordingInterval = setInterval(() => {
+          if(isTestingMode) {
+            recordTestData(testCurrentModel);
+            
+            // Update elapsed time
+            if(elapsedTextEl) {
+              const elapsed = Math.floor((Date.now() - testStartTime) / 1000);
+              const minutes = Math.floor(elapsed / 60);
+              const seconds = elapsed % 60;
+              elapsedTextEl.textContent = `${minutes}m ${seconds}s`;
+            }
+          }
+        }, 1000);
+        
+        // Switch to COCO after 1 minute (60 seconds)
+        testModelSwitchTimeout = setTimeout(async () => {
+          if(isTestingMode && testCurrentModel === 'yolo') {
+            log('⏰ Testing: 1 minute elapsed, switching to COCO SSD...');
+            await switchTestModel('coco');
+            
+            // Stop testing after another minute
+            testModelSwitchTimeout = setTimeout(() => {
+              if(isTestingMode) {
+                stopTesting();
+              }
+            }, 60000); // Another 60 seconds
+          }
+        }, 60000); // 60 seconds = 1 minute
+        
+        log('✅ Testing Mode started - Recording data every 1 second');
+      }
+      
+      // Stop testing mode
+      function stopTesting() {
+        if(!isTestingMode) return;
+        
+        log('🧪 Stopping Performance Testing Mode...');
+        isTestingMode = false;
+        
+        // Clear intervals and timeouts
+        if(testRecordingInterval) {
+          clearInterval(testRecordingInterval);
+          testRecordingInterval = null;
+        }
+        if(testModelSwitchTimeout) {
+          clearTimeout(testModelSwitchTimeout);
+          testModelSwitchTimeout = null;
+        }
+        
+        // Update UI
+        const startTestBtn = document.getElementById('startTestBtn');
+        const stopTestBtn = document.getElementById('stopTestBtn');
+        const statusTextEl = document.getElementById('testStatusText');
+        
+        if(startTestBtn) startTestBtn.disabled = false;
+        if(stopTestBtn) stopTestBtn.disabled = true;
+        if(statusTextEl) statusTextEl.textContent = 'Completed';
+        
+        // Generate and download CSV files
+        log('📊 Generating CSV files...');
+        
+        if(testingData.yolo.length > 0) {
+          const yoloCSV = generateCSV(testingData.yolo, 'yolo');
+          downloadCSV(yoloCSV, `yolo_performance_${Date.now()}.csv`);
+          log(`✅ YOLO CSV generated: ${testingData.yolo.length} data points`);
+          addAlert(`✅ YOLO CSV downloaded (${testingData.yolo.length} data points)`);
+        }
+        
+        if(testingData.coco.length > 0) {
+          const cocoCSV = generateCSV(testingData.coco, 'coco');
+          downloadCSV(cocoCSV, `coco_performance_${Date.now()}.csv`);
+          log(`✅ COCO SSD CSV generated: ${testingData.coco.length} data points`);
+          addAlert(`✅ COCO SSD CSV downloaded (${testingData.coco.length} data points)`);
+        }
+        
+        log('✅ Testing Mode completed - CSV files downloaded');
+        addAlert('✅ Performance Testing completed - CSV files downloaded');
+      }
+      
+      // Event handlers for testing buttons
+      document.getElementById('startTestBtn').onclick = async () => {
+        await startTesting();
+      };
+      
+      document.getElementById('stopTestBtn').onclick = () => {
+        stopTesting();
+      };
+      
+      // Chart drawing function
+      function drawChart(canvasId, data, maxValue, color, label) {
+        const canvas = document.getElementById(canvasId);
+        if(!canvas) return;
+        
+        const ctx = canvas.getContext('2d');
+        const rect = canvas.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        
+        // Set canvas size accounting for device pixel ratio
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        ctx.scale(dpr, dpr);
+        
+        // Use actual display size
+        const width = rect.width;
+        const height = rect.height;
+        
+        const padding = 4;
+        const chartWidth = width - (padding * 2);
+        const chartHeight = height - (padding * 2);
+        
+        // Clear canvas
+        ctx.clearRect(0, 0, width, height);
+        
+        if(data.length === 0) return;
+        
+        // Find min and max for scaling
+        const values = data.map(d => d.value);
+        const min = Math.min(...values, 0);
+        const max = Math.max(...values, maxValue || Math.max(...values) * 1.1);
+        const range = max - min || 1;
+        
+        // Draw grid lines
+        ctx.strokeStyle = '#e2e8f0';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(padding, height - padding);
+        ctx.lineTo(width - padding, height - padding);
+        ctx.stroke();
+        
+        // Draw line chart
+        if(data.length > 0) {
+          ctx.strokeStyle = color || '#3b82f6';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          
+          for(let i = 0; i < data.length; i++) {
+            const x = padding + (data.length > 1 ? (i / (data.length - 1)) : 0) * chartWidth;
+            const normalizedValue = (data[i].value - min) / range;
+            const y = height - padding - (normalizedValue * chartHeight);
+            
+            if(i === 0) {
+              ctx.moveTo(x, y);
+            } else {
+              ctx.lineTo(x, y);
+            }
+          }
+          
+          ctx.stroke();
+          
+          // Fill area under line
+          ctx.lineTo(width - padding, height - padding);
+          ctx.lineTo(padding, height - padding);
+          ctx.closePath();
+          ctx.fillStyle = color ? color + '20' : '#3b82f620';
+          ctx.fill();
+        }
+      }
+      
+      // Update chart data and redraw
+      function updateChart(chartId, value, dataArray, maxValue, color) {
+        if(!value || isNaN(value)) return;
+        
+        // Add new data point
+        dataArray.push({ value: value, time: Date.now() });
+        
+        // Keep only last maxChartPoints
+        if(dataArray.length > maxChartPoints) {
+          dataArray.shift();
+        }
+        
+        // Draw chart with slight delay to ensure canvas is ready
+        requestAnimationFrame(() => {
+          drawChart(chartId, dataArray, maxValue, color);
+        });
+      }
     </script>
 </body>
 </html>

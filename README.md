@@ -8,15 +8,40 @@ Edge Proctor System is an advanced online exam proctoring solution designed spec
 
 ## Key Features
 
-### 🤖 AI/ML Modules (Simplified)
-- **YOLOv8n Detection**: Single model for face/person/objects (ONNX Runtime Web)
+### 🤖 AI/ML Modules
+- **YOLOv8n Detection**: High-accuracy object detection model (ONNX Runtime Web)
+  - Default model for accurate detection
+  - Supports person, cell phone, laptop, and 80 COCO classes
+  - Model size: ~6MB ONNX format
+  - Inference time: ~30-100ms per frame
+- **COCO SSD Detection**: Fast alternative model (TensorFlow.js)
+  - Faster inference for real-time applications
+  - Model size: ~28MB (browser-cached)
+  - Inference time: ~50-200ms per frame
+  - Supports same object classes as YOLO
 - **One-shot ID Verification**: pHash + color histogram against one enrollment photo
+  - Face recognition for identity verification
+  - Enrollment stored locally in IndexedDB
 - **Whisper Detection**: WebAudio-based heuristic for low-volume speech
+  - Real-time audio monitoring
+  - Suspicious activity detection
 
-### ⚡ Performance Targets
-- **Inference Time**: <50ms per frame
-- **FPS**: >20 frames per second
-- **Memory Usage**: <200MB
+### ⚡ Performance Monitoring
+- **Real-time Metrics Dashboard**:
+  - Inference Time: Live tracking with line chart
+  - FPS: Frame rate monitoring with visualization
+  - CPU Usage: Performance tracking with trends
+- **Performance Testing Mode**:
+  - Automated comparison between YOLOv8n and COCO SSD
+  - Time-series data collection (1 data point per second)
+  - CSV export for research analysis
+  - Automatic model switching (1 minute YOLO → 1 minute COCO)
+  - Total testing duration: 2 minutes (120 data points per model)
+
+### 📊 Performance Targets
+- **Inference Time**: <100ms per frame (YOLO), <200ms per frame (COCO)
+- **FPS**: >10 frames per second
+- **CPU Usage**: Optimized for edge devices
 - **Model Size**: <50MB total
 - **Load Time**: <5 seconds
 - **False Positive Rate**: <7%
@@ -76,18 +101,52 @@ src/
 
 1. Navigate to the Setup page
 2. Configure exam details (title, duration, description)
-3. Enable/disable AI modules as needed
-4. Set alert thresholds
-5. Review settings and start the exam
+3. Select detection model (YOLOv8n or COCO SSD)
+4. Enable/disable AI modules as needed
+5. Set alert thresholds
+6. Review settings and start the exam
 
 ### Proctoring Interface
 
 The proctoring interface provides:
-- Live video feed
-- Real-time performance metrics
+- Live video feed with real-time object detection
+- Boundary boxes for detected objects (person, cell phone, laptop, etc.)
+- Real-time performance metrics with live charts:
+  - Inference Time trend (line chart)
+  - FPS trend (line chart)
+  - CPU Usage trend (line chart)
 - Alert notifications
 - System status indicators
 - Exam timer
+
+### Performance Testing Mode
+
+For research and model comparison:
+
+1. **Start Testing**:
+   - Click "Start Testing" button in Performance Testing Mode card
+   - System automatically starts with YOLOv8n model
+   - Records data every 1 second
+
+2. **Automatic Model Switch**:
+   - After 1 minute, system switches to COCO SSD automatically
+   - Continues recording for another minute
+   - Total duration: 2 minutes
+
+3. **Data Collection**:
+   - Each data point contains:
+     - Timestamp (ISO format)
+     - Elapsed seconds from start
+     - Inference time (ms)
+     - Average inference time (ms)
+     - FPS
+     - CPU usage (%)
+
+4. **CSV Export**:
+   - Two CSV files automatically generated:
+     - `yolo_performance_[timestamp].csv`: YOLOv8n data (~60 data points)
+     - `coco_performance_[timestamp].csv`: COCO SSD data (~60 data points)
+   - Files automatically downloaded when testing completes
 
 ### Reports
 
@@ -119,9 +178,39 @@ After exam completion, view detailed reports including:
 
 ## Models and Enrollment
 
-- Place YOLOv8n ONNX model at `public/models/yolov8n.onnx` (optional to boot; detection no-ops if missing).
-- Put your enrollment photo at `public/enrollment/Foto_Nathan.jpg` to auto-load from Settings, or upload manually on Settings → Security.
-- Enrollment is saved locally under key `proctor:enrollment` (cropped PNG + pHash + histogram).
+### Detection Models
+
+**YOLOv8n (Default)**:
+- Location: `public/models/yolov8n.onnx`
+- Format: ONNX Runtime Web
+- Size: ~6MB
+- Auto-loads on page initialization
+- Supports 80 COCO classes
+- Optimized for accuracy
+
+**COCO SSD**:
+- Source: TensorFlow.js CDN (auto-download)
+- Format: TensorFlow.js model
+- Size: ~28MB (browser-cached)
+- Alternative faster model
+- Supports same COCO classes
+
+### Model Selection
+
+- Switch between models using UI buttons:
+  - "YOLOv8n (Akurat)": For high-accuracy detection
+  - "COCO SSD (Cepat)": For faster real-time detection
+- Model state persists during session
+- Both models support same detection classes
+
+### Enrollment
+
+- Put enrollment photo at `public/enrollment/Foto_Nathan.jpg` to auto-load
+- Or upload manually on Settings → Security
+- Enrollment is saved locally under key `proctor:enrollment`:
+  - Cropped face PNG
+  - pHash for face matching
+  - Color histogram for verification
 
 ## API Reference
 

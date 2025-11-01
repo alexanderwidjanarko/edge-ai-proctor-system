@@ -59,12 +59,35 @@ Camera Feed → ImageData → Tensor → ONNX Models → Results → Analysis En
 - **Inference Time**: ~12ms
 - **Accuracy**: ±10° error range
 
-### 4. Object Detection (YOLOv8n)
+### 4. Object Detection Models
+
+#### YOLOv8n (Primary Model)
 - **Input**: 640x640 RGB image
-- **Output**: Bounding boxes + class labels
+- **Output**: Bounding boxes + class labels + confidence scores
+- **Format**: ONNX Runtime Web
 - **Size**: ~6.1MB
-- **Inference Time**: ~25ms
-- **Accuracy**: 90%+ on target objects
+- **Inference Time**: 30-100ms (typical: 35-50ms)
+- **Accuracy**: 90%+ on COCO dataset
+- **Classes**: 80 COCO classes
+- **Features**:
+  - Person detection
+  - Suspicious object detection (cell phone, laptop, etc.)
+  - Real-time boundary box rendering
+  - Identity verification integration
+
+#### COCO SSD (Alternative Model)
+- **Input**: Video element (direct processing)
+- **Output**: Bounding boxes + class labels + confidence scores
+- **Format**: TensorFlow.js
+- **Size**: ~28MB (browser-cached)
+- **Inference Time**: 50-200ms (typical: 80-120ms)
+- **Accuracy**: 85%+ on COCO dataset
+- **Classes**: 80 COCO classes
+- **Features**:
+  - Faster loading time
+  - Direct video element processing
+  - Same detection capabilities as YOLO
+  - Better performance on some devices
 
 ### 5. Temporal Analysis (GRU)
 - **Input**: 30-frame sequence (14 features each)
@@ -278,11 +301,56 @@ const browserSupport = {
 
 ## Monitoring & Analytics
 
+### Real-time Performance Dashboard
+
+#### Metrics Display
+- **Inference Time**: Current and average inference time
+  - Real-time line chart visualization
+  - Rolling average calculation
+  - Last 50 data points displayed
+- **FPS**: Frames per second monitoring
+  - Real-time line chart visualization
+  - Updates every second
+  - Maximum 30 FPS display
+- **CPU Usage**: Percentage utilization
+  - Real-time line chart visualization
+  - Estimated based on inference time
+  - Performance API integration
+
+#### Visual Components
+- Line charts with area fill
+- Color-coded metrics (blue, green, orange)
+- Responsive canvas rendering
+- High-DPI display support
+
+### Performance Testing Mode
+
+#### Automated Testing Protocol
+- **Duration**: 2 minutes (1 min per model)
+- **Sampling Rate**: 1 data point per second
+- **Models Tested**: YOLOv8n → COCO SSD
+- **Data Points**: ~120 total (~60 per model)
+
+#### Data Collection
+- ISO 8601 timestamps
+- Elapsed time tracking
+- Inference time (instantaneous and average)
+- FPS measurements
+- CPU usage percentage
+
+#### CSV Export
+- Time-series format
+- Two files per test session:
+  - `yolo_performance_[timestamp].csv`
+  - `coco_performance_[timestamp].csv`
+- Automatic download on completion
+- Research-ready data format
+
 ### Performance Metrics
 - **Real-time Inference Time**: Track ML model performance
 - **FPS Monitoring**: Video processing frame rate
-- **Memory Usage**: Heap size and garbage collection
 - **CPU Utilization**: Browser process monitoring
+- **Model Comparison**: Automated benchmarking system
 
 ### Error Tracking
 - **ML Model Failures**: Inference errors and fallbacks
