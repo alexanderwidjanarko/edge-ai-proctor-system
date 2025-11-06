@@ -1,0 +1,2888 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Edge Proctor System - Prototype</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
+      .header { color: #fff; padding: 20px; text-align: center; }
+      .container { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; padding: 20px; max-width: 1400px; margin: 0 auto; }
+      .card { background: rgba(255,255,255,0.95); border-radius: 12px; padding: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); }
+      .video { height: 400px; background: #000; border-radius: 8px; position: relative; overflow: hidden; }
+      .controls { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+      .btn { padding: 10px 16px; border-radius: 6px; border: 0; color: #fff; cursor: pointer; font-weight: 600; }
+      .btn-primary { background: #22c55e; }
+      .btn-danger { background: #ef4444; }
+      .btn-secondary { background: #3b82f6; }
+      .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      .metric { text-align: center; background: #f8fafc; border-radius: 8px; padding: 12px; border-left: 4px solid #3b82f6; }
+      .metric .v { font-size: 24px; font-weight: 700; color: #1d4ed8; }
+      .alert { padding: 12px; border-radius: 8px; margin-bottom: 10px; background: #dbeafe; border-left: 4px solid #3b82f6; }
+      .status { display: flex; justify-content: space-between; align-items: center; }
+      .dot { width: 10px; height: 10px; border-radius: 50%; background: #6b7280; transition: background 0.3s; }
+      .dot.active { background: #16a34a; }
+      .logs { background:#0f172a; color:#e2e8f0; font-family: monospace; font-size:12px; padding:12px; border-radius:8px; max-height:180px; overflow:auto; }
+      .audio-meter { background:#1e293b; height:120px; border-radius:8px; padding:12px; position:relative; }
+      .audio-bar { background:#0ea5e9; height:4px; border-radius:2px; margin-bottom:4px; transition:width 0.1s; }
+      .audio-labels { display:flex; justify-content:space-between; font-size:10px; color:#94a3b8; margin-top:4px; }
+      .whisper-indicator { background:#fbbf24; height:8px; border-radius:4px; margin-top:8px; transition:width 0.2s; }
+    </style>
+</head>
+<body>
+    <div class="header">
+      <h1>🎯 Edge Proctor System - Accurate Detection (Prototype)</h1>
+      <p>Single-page prototype with YOLOv8n + One-shot ID + Whisper</p>
+    </div>
+    <!-- TensorFlow.js for COCO SSD -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
+    <div class="container">
+      <div>
+        <div class="card">
+          <div class="video" id="videoBox" style="position:relative">
+            <video id="video" autoplay muted playsinline style="width:100%;height:100%;object-fit:contain;display:none"></video>
+            <canvas id="overlayCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;display:none"></canvas>
+            <div id="videoPlaceholder" style="color:#fff;display:flex;align-items:center;justify-content:center;height:100%;opacity:.6">Camera Feed</div>
+            </div>
+            <div class="controls">
+            <button class="btn btn-primary" id="startBtn">Start Proctoring</button>
+            <button class="btn btn-danger" id="stopBtn" disabled>Stop</button>
+            <button class="btn btn-secondary" id="loadEnrollBtn">Load Default Enrollment</button>
+            </div>
+            <div style="margin-top:12px;padding:12px;background:#f8fafc;border-radius:8px;border-left:4px solid #3b82f6">
+              <strong style="display:block;margin-bottom:8px">🤖 Pilih Model Detection:</strong>
+              <div style="display:flex;gap:8px">
+                <button class="btn btn-secondary" id="selectYoloBtn" style="flex:1;font-size:13px">YOLOv8n (Akurat)</button>
+                <button class="btn btn-secondary" id="selectCocoBtn" style="flex:1;font-size:13px">COCO SSD (Cepat)</button>
+              </div>
+              <div id="modelStatus" style="margin-top:8px;font-size:12px;color:#64748b">Model aktif: <span id="currentModel">YOLOv8n</span></div>
+            </div>
+                </div>
+        <div class="card" style="margin-top:16px">
+                <h3>📊 Live Detection Status</h3>
+          <div class="grid-2">
+            <div class="metric"><div class="v" id="persons">0</div><div>Persons Detected</div></div>
+            <div class="metric"><div class="v" id="objects">0</div><div>Suspicious Objects</div></div>
+                    </div>
+          <div id="detInfo" style="margin-top:8px;color:#64748b;font-size:12px">Ready.</div>
+          <div id="identityStatusCard" style="margin-top:8px;padding:8px;background:#f1f5f9;border-radius:6px;font-size:12px">
+            <strong>Identity Verification:</strong> <span id="identityResult">—</span>
+                    </div>
+                    </div>
+        <div class="card" style="margin-top:16px">
+          <h3>🧾 Logs</h3>
+          <div id="logs" class="logs"></div>
+                    </div>
+                </div>
+      <div>
+            <div class="card">
+                <h3>🚨 Live Alerts</h3>
+          <div id="alerts"></div>
+                    </div>
+        <div class="card" style="margin-top:16px">
+          <h3>⚡ Performance</h3>
+          <div class="grid-2" style="grid-template-columns: repeat(3, 1fr);">
+            <div class="metric">
+              <div class="v" id="inf">--</div>
+              <div>Inference Time</div>
+              <canvas id="infChart" style="width: 100%; height: 60px; margin-top: 8px; border-radius: 4px; background: #f8fafc;"></canvas>
+            </div>
+            <div class="metric">
+              <div class="v" id="fps">--</div>
+              <div>FPS</div>
+              <canvas id="fpsChart" style="width: 100%; height: 60px; margin-top: 8px; border-radius: 4px; background: #f8fafc;"></canvas>
+            </div>
+            <div class="metric">
+              <div class="v" id="cpu">--</div>
+              <div>CPU Usage</div>
+              <canvas id="cpuChart" style="width: 100%; height: 60px; margin-top: 8px; border-radius: 4px; background: #f8fafc;"></canvas>
+            </div>
+                </div>
+            </div>
+        <div class="card" style="margin-top:16px">
+                <h3>🎯 AI Modules Status</h3>
+          <div class="status"><span id="modelStatusText">YOLOv8n Detection</span><span class="dot" id="yoloStatus"></span></div>
+          <div class="status" style="margin-top:8px"><span>Identity Verification</span><span class="dot" id="identityStatus"></span></div>
+          <div class="status" style="margin-top:8px"><span>Whisper Detection</span><span class="dot" id="whisperStatus"></span></div>
+                    </div>
+        <div class="card" style="margin-top:16px">
+          <h3>🧪 Performance Testing Mode</h3>
+          <div style="margin-bottom:12px;padding:12px;background:#fff7ed;border-radius:8px;border-left:4px solid #f59e0b">
+            <div style="font-size:13px;color:#92400e">
+              <strong>Testing Mode:</strong> Akan test YOLO (1 menit) lalu COCO SSD (1 menit). Data akan direkam setiap 1 detik dan di-generate ke CSV.
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <button class="btn btn-primary" id="startTestBtn" style="flex:1">Start Testing</button>
+            <button class="btn btn-danger" id="stopTestBtn" disabled style="flex:1">Stop Testing</button>
+          </div>
+          <div id="testStatus" style="padding:12px;background:#f8fafc;border-radius:8px;font-size:13px;color:#64748b">
+            <div><strong>Status:</strong> <span id="testStatusText">Ready</span></div>
+            <div style="margin-top:4px"><strong>Current Model:</strong> <span id="testModelText">-</span></div>
+            <div style="margin-top:4px"><strong>Elapsed Time:</strong> <span id="testElapsedText">0s</span></div>
+            <div style="margin-top:4px"><strong>Data Points:</strong> <span id="testDataPoints">0</span></div>
+          </div>
+                    </div>
+        <div class="card" style="margin-top:16px">
+          <h3>🎤 Audio Whisper Detection</h3>
+          <div class="audio-meter">
+            <div id="audioBars"></div>
+            <div class="audio-labels">
+              <span>0%</span>
+              <span>50%</span>
+              <span>100%</span>
+                    </div>
+            <div style="margin-top:12px;font-size:11px;color:#94a3b8">Whisper Level:</div>
+            <div class="whisper-indicator" id="whisperBar" style="width:0%"></div>
+            <div style="margin-top:8px;font-size:10px;color:#64748b" id="audioStatus">Audio: Not active</div>
+                    </div>
+                    </div>
+                    </div>
+                </div>
+    <script>
+      const alerts = document.getElementById('alerts');
+      const logs = document.getElementById('logs');
+      const video = document.getElementById('video');
+      const videoPh = document.getElementById('videoPlaceholder');
+      const audioBars = document.getElementById('audioBars');
+      const whisperBar = document.getElementById('whisperBar');
+      const audioStatus = document.getElementById('audioStatus');
+      const identityResult = document.getElementById('identityResult');
+      const overlayCanvas = document.getElementById('overlayCanvas');
+      const yoloStatus = document.getElementById('yoloStatus');
+      const identityStatus = document.getElementById('identityStatus');
+      const whisperStatus = document.getElementById('whisperStatus');
+      let stream = null;
+      let audioContext = null;
+      let audioStream = null;
+      let analyser = null;
+      let audioInterval = null;
+      let detectionCanvas = null;
+      let detectionCtx = null;
+      let overlayCtx = null;
+      let ortSession = null;
+      let detectionInterval = null;
+      let currentVerification = null;
+      
+      // Model selection: 'yolo' or 'cocossd'
+      let currentModelType = 'yolo'; // Default: YOLOv8n (accurate)
+      let cocoSsdModel = null; // COCO SSD model instance
+      let fpsCounter = { frames: 0, lastTime: 0, fps: 0 };
+      let inferenceTimes = [];
+      
+      // Chart data history (keep last 50 points for smooth visualization)
+      let infChartData = [];
+      let fpsChartData = [];
+      let cpuChartData = [];
+      const maxChartPoints = 50;
+      
+      // Testing mode variables
+      let isTestingMode = false;
+      let testingData = {
+        yolo: [],
+        coco: []
+      };
+      let testStartTime = null;
+      let testCurrentModel = null;
+      let testModelStartTime = null;
+      let testRecordingInterval = null;
+      let testModelSwitchTimeout = null;
+      
+      // CPU Usage tracking using Performance API
+      let cpuUsageTracker = {
+        lastCpuTime: 0,
+        lastWallTime: 0,
+        usage: 0,
+        samples: []
+      };
+      
+      // Object pooling for memory efficiency - reuse objects instead of allocating new ones
+      const objectPool = {
+        preprocessCanvas: null,        // Reuse preprocessing canvas
+        preprocessData: null,          // Reuse Float32Array buffer
+        detectionsArray: [],            // Reuse detections array
+        postprocessBuffer: null,        // Reuse postprocessing buffer
+        
+        // Get or create pooled canvas
+        getPreprocessCanvas: function(size){
+          if(!this.preprocessCanvas || this.preprocessCanvas.width !== size){
+            this.preprocessCanvas = document.createElement('canvas');
+            this.preprocessCanvas.width = size;
+            this.preprocessCanvas.height = size;
+          }
+          return this.preprocessCanvas;
+        },
+        
+        // Get or create Float32Array buffer
+        getDataBuffer: function(length){
+          if(!this.preprocessData || this.preprocessData.length !== length){
+            this.preprocessData = new Float32Array(length);
+          }
+          return this.preprocessData;
+        },
+        
+        // Clear and reuse detections array
+        clearDetections: function(){
+          this.detectionsArray.length = 0;
+          return this.detectionsArray;
+        }
+      };
+
+      // Initialize audio bars
+      for(let i=0; i<20; i++){
+        const bar = document.createElement('div');
+        bar.className = 'audio-bar';
+        bar.style.width = '0%';
+        audioBars.appendChild(bar);
+      }
+
+      // One-shot verification utils (pHash + histogram)
+      function loadEnrollment(){
+        const data = localStorage.getItem('proctor:enrollment');
+        if(!data) return null;
+        try{ return JSON.parse(data); } catch{ return null; }
+      }
+
+      async function computePHash(canvas){
+        const size = 32;
+        const small = document.createElement('canvas');
+        small.width = size; small.height = size;
+        const ctx = small.getContext('2d');
+        ctx.drawImage(canvas, 0, 0, size, size);
+        const img = ctx.getImageData(0, 0, size, size);
+        const gray = new Float32Array(size * size);
+        for(let i=0; i<img.data.length; i+=4){
+          const r=img.data[i], g=img.data[i+1], b=img.data[i+2];
+          gray[i/4] = 0.299*r + 0.587*g + 0.114*b;
+        }
+        const dct = dct2(gray, size);
+        const sub = [];
+        for(let y=0; y<8; y++){
+          for(let x=0; x<8; x++){
+            if(x===0 && y===0) continue;
+            sub.push(dct[y*size + x]);
+          }
+        }
+        const median = sub.slice().sort((a,b)=>a-b)[Math.floor(sub.length/2)];
+        let hash = '';
+        for(const v of sub) hash += v > median ? '1' : '0';
+        return hash;
+      }
+
+      function computeRgbHistogram(canvas){
+        const bins = 16;
+        const ctx = canvas.getContext('2d');
+        const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const hist = new Array(bins*3).fill(0);
+        for(let i=0; i<img.data.length; i+=4){
+          hist[(img.data[i]*bins)>>>8]++;
+          hist[bins + ((img.data[i+1]*bins)>>>8)]++;
+          hist[2*bins + ((img.data[i+2]*bins)>>>8)]++;
+        }
+        const sum = hist.reduce((a,b)=>a+b, 0) || 1;
+        return hist.map(v => v/sum);
+      }
+
+      function dct2(input, size){
+        const output = new Float32Array(size*size);
+        const c = [];
+        for(let i=0; i<size; i++) c[i] = i===0 ? 1/Math.sqrt(2) : 1;
+        for(let u=0; u<size; u++){
+          for(let v=0; v<size; v++){
+            let sum = 0;
+            for(let x=0; x<size; x++){
+              for(let y=0; y<size; y++){
+                sum += input[y*size+x] * Math.cos(((2*x+1)*u*Math.PI)/(2*size)) * Math.cos(((2*y+1)*v*Math.PI)/(2*size));
+              }
+            }
+            output[v*size+u] = 0.25 * c[u] * c[v] * sum;
+          }
+        }
+        return output;
+      }
+
+      function hammingDistance(a, b){
+        const len = Math.min(a.length, b.length);
+        let d = 0;
+        for(let i=0; i<len; i++) if(a[i] !== b[i]) d++;
+        return d + Math.abs(a.length - b.length);
+      }
+
+      function cosineSimilarity(a, b){
+        const len = Math.min(a.length, b.length);
+        let dot=0, na=0, nb=0;
+        for(let i=0; i<len; i++){
+          dot += a[i]*b[i]; na += a[i]*a[i]; nb += b[i]*b[i];
+        }
+        return dot / (Math.sqrt(na)*Math.sqrt(nb) || 1);
+      }
+
+      // Histogram of Oriented Gradients (HOG) - excellent for face recognition
+      function computeHOG(canvas, cellSize = 8, blockSize = 2, bins = 9){
+        const imgData = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+        const gray = new Float32Array(canvas.width * canvas.height);
+        
+        // Convert to grayscale
+        for(let i = 0; i < imgData.data.length; i += 4){
+          gray[i/4] = 0.299 * imgData.data[i] + 0.587 * imgData.data[i+1] + 0.114 * imgData.data[i+2];
+        }
+        
+        // Compute gradients
+        const gx = new Float32Array(canvas.width * canvas.height);
+        const gy = new Float32Array(canvas.width * canvas.height);
+        const magnitude = new Float32Array(canvas.width * canvas.height);
+        const direction = new Float32Array(canvas.width * canvas.height);
+        
+        for(let y = 1; y < canvas.height - 1; y++){
+          for(let x = 1; x < canvas.width - 1; x++){
+            const idx = y * canvas.width + x;
+            const left = gray[y * canvas.width + (x-1)];
+            const right = gray[y * canvas.width + (x+1)];
+            const top = gray[(y-1) * canvas.width + x];
+            const bottom = gray[(y+1) * canvas.width + x];
+            
+            gx[idx] = right - left;
+            gy[idx] = bottom - top;
+            magnitude[idx] = Math.sqrt(gx[idx]*gx[idx] + gy[idx]*gy[idx]);
+            direction[idx] = Math.atan2(gy[idx], gx[idx]) + Math.PI; // 0 to 2π
+          }
+        }
+        
+        // Compute HOG features
+        const cellsX = Math.floor(canvas.width / cellSize);
+        const cellsY = Math.floor(canvas.height / cellSize);
+        const blocksX = cellsX - blockSize + 1;
+        const blocksY = cellsY - blockSize + 1;
+        const features = [];
+        
+        for(let by = 0; by < blocksY; by++){
+          for(let bx = 0; bx < blocksX; bx++){
+            const blockHist = new Array(bins).fill(0);
+            
+            for(let cy = 0; cy < blockSize; cy++){
+              for(let cx = 0; cx < blockSize; cx++){
+                const cellY = by + cy;
+                const cellX = bx + cx;
+                
+                for(let py = 0; py < cellSize; py++){
+                  for(let px = 0; px < cellSize; px++){
+                    const y = cellY * cellSize + py;
+                    const x = cellX * cellSize + px;
+                    if(y >= canvas.height || x >= canvas.width) continue;
+                    
+                    const idx = y * canvas.width + x;
+                    const mag = magnitude[idx];
+                    const dir = direction[idx];
+                    
+                    // Bin the direction (0 to 2π -> 0 to bins-1)
+                    let bin = Math.floor((dir / (2 * Math.PI)) * bins);
+                    if(bin >= bins) bin = bins - 1;
+                    
+                    blockHist[bin] += mag;
+                  }
+                }
+              }
+            }
+            
+            // L2-normalize the block
+            let norm = 0;
+            for(let i = 0; i < blockHist.length; i++){
+              norm += blockHist[i] * blockHist[i];
+            }
+            norm = Math.sqrt(norm) + 1e-6;
+            
+            for(let i = 0; i < blockHist.length; i++){
+              features.push(blockHist[i] / norm);
+            }
+          }
+        }
+        
+        return features;
+      }
+
+      // Local Binary Pattern Histogram (LBPH) - better than RGB histogram
+      function computeLBPH(canvas, radius = 1, neighbors = 8){
+        const imgData = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+        const gray = new Uint8Array(canvas.width * canvas.height);
+        
+        // Convert to grayscale
+        for(let i = 0; i < imgData.data.length; i += 4){
+          gray[i/4] = Math.round(0.299 * imgData.data[i] + 0.587 * imgData.data[i+1] + 0.114 * imgData.data[i+2]);
+        }
+        
+        // Compute LBP for each pixel
+        const lbpCodes = new Uint8Array(canvas.width * canvas.height);
+        const hist = new Array(256).fill(0);
+        
+        for(let y = radius; y < canvas.height - radius; y++){
+          for(let x = radius; x < canvas.width - radius; x++){
+            const center = gray[y * canvas.width + x];
+            let lbpCode = 0;
+            
+            // Sample neighbors in a circle
+            for(let i = 0; i < neighbors; i++){
+              const angle = (2 * Math.PI * i) / neighbors;
+              const sampleX = Math.round(x + radius * Math.cos(angle));
+              const sampleY = Math.round(y + radius * Math.sin(angle));
+              
+              if(sampleX >= 0 && sampleX < canvas.width && sampleY >= 0 && sampleY < canvas.height){
+                const neighbor = gray[sampleY * canvas.width + sampleX];
+                if(neighbor >= center){
+                  lbpCode |= (1 << i);
+                }
+              }
+            }
+            
+            lbpCodes[y * canvas.width + x] = lbpCode;
+            hist[lbpCode]++;
+          }
+        }
+        
+        // Normalize histogram
+        const total = canvas.width * canvas.height;
+        return hist.map(h => h / total);
+      }
+
+      async function verifyOneShot(faceCanvas, threshold=0.60){
+        const enrolled = loadEnrollment();
+        if(!enrolled){
+          log('⚠️ Verification skipped: No enrollment data found');
+          return null;
+        }
+        
+        log(`🔍 Verifying identity against enrollment: ${enrolled.displayName || 'Unknown'}`);
+        
+        // Simplified and more robust approach: LBPH + normalized pixel comparison
+        const pHash = await computePHash(faceCanvas);
+        const lbph = computeLBPH(faceCanvas);
+        
+        const pHashSim = 1 - hammingDistance(enrolled.pHash, pHash) / Math.max(enrolled.pHash.length, pHash.length);
+        
+        // LBPH similarity using chi-square distance
+        let lbphSim = 0;
+        if(enrolled.lbph && enrolled.lbph.length === lbph.length){
+          let chiSquare = 0;
+          let totalSum = 0;
+          for(let i = 0; i < lbph.length; i++){
+            const a = enrolled.lbph[i] || 0;
+            const b = lbph[i] || 0;
+            totalSum += Math.abs(a - b);
+            if(a + b > 1e-10){
+              chiSquare += Math.pow(a - b, 2) / (a + b + 1e-10);
+            }
+          }
+          // Normalized chi-square to similarity (0-1), higher = better
+          lbphSim = 1 / (1 + chiSquare);
+          
+          // Also try direct correlation as backup
+          if(lbphSim < 0.3){
+            const correlation = cosineSimilarity(enrolled.lbph, lbph);
+            lbphSim = Math.max(lbphSim, correlation * 0.8); // Use correlation if better
+          }
+        } else if(enrolled.histogram){
+          const hist = computeRgbHistogram(faceCanvas);
+          lbphSim = cosineSimilarity(enrolled.histogram, hist);
+        }
+        
+        // Normalized pixel-level comparison for additional verification
+        let pixelSim = 0;
+        try{
+          const imgData1 = faceCanvas.getContext('2d').getImageData(0, 0, faceCanvas.width, faceCanvas.height);
+          const enrolledImg = new Image();
+          enrolledImg.src = enrolled.imageDataUrl;
+          await new Promise((resolve, reject) => {
+            enrolledImg.onload = resolve;
+            enrolledImg.onerror = reject;
+          });
+          
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = faceCanvas.width;
+          tempCanvas.height = faceCanvas.height;
+          const tempCtx = tempCanvas.getContext('2d');
+          tempCtx.drawImage(enrolledImg, 0, 0, tempCanvas.width, tempCanvas.height);
+          const imgData2 = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+          
+          let diffSum = 0;
+          let maxDiff = 0;
+          for(let i = 0; i < imgData1.data.length; i += 4){
+            const r1 = imgData1.data[i];
+            const g1 = imgData1.data[i+1];
+            const b1 = imgData1.data[i+2];
+            const r2 = imgData2.data[i];
+            const g2 = imgData2.data[i+1];
+            const b2 = imgData2.data[i+2];
+            
+            const diff = Math.abs(r1-r2) + Math.abs(g1-g2) + Math.abs(b1-b2);
+            diffSum += diff;
+            maxDiff = Math.max(maxDiff, diff);
+          }
+          
+          // Convert difference to similarity (0-1)
+          const avgDiff = diffSum / (imgData1.data.length * 3 / 4);
+          pixelSim = Math.max(0, 1 - (avgDiff / 255));
+        }catch(e){
+          pixelSim = 0; // Skip if comparison fails
+        }
+        
+        // Weighted combination: LBPH (60%) + pHash (25%) + Pixel (15%)
+        // LBPH is most robust, pHash for structure, pixel for color
+        const score = 0.6 * lbphSim + 0.25 * pHashSim + 0.15 * pixelSim;
+        
+        const result = { score, match: score >= threshold, name: enrolled.displayName || 'Unknown' };
+        
+        log(`📊 Verification: LBPH=${(lbphSim*100).toFixed(1)}%, pHash=${(pHashSim*100).toFixed(1)}%, Pixel=${(pixelSim*100).toFixed(1)}%, Combined=${(score*100).toFixed(1)}%, Threshold=${(threshold*100).toFixed(0)}%`);
+        
+        if(result.match){
+          log(`✅ ONE-SHOT VERIFICATION: MATCH - ${result.name} (Score: ${(score*100).toFixed(1)}%)`);
+        } else {
+          log(`❌ ONE-SHOT VERIFICATION: NO MATCH - Score ${(score*100).toFixed(1)}% below threshold ${(threshold*100).toFixed(0)}%`);
+        }
+        
+        return result;
+      }
+
+      async function downloadYOLOv8Model(){
+        // Try multiple sources for YOLOv8n ONNX model
+        // Note: User needs to provide model manually if auto-download fails
+        const sources = [
+          // Try Hugging Face model hub (more reliable)
+          'https://huggingface.co/ultralytics/yolov8n/resolve/main/yolov8n.onnx',
+          // Try direct download from releases (may require auth)
+          'https://github.com/ultralytics/assets/releases/download/v8.2.0/yolov8n.onnx'
+        ];
+        
+        log('📥 Model tidak ditemukan. Mencoba download otomatis...');
+        
+        for(const url of sources){
+          try{
+            log(`   🔄 Mencoba download dari: ${url}`);
+            const response = await fetch(url, { method: 'GET' });
+            
+            if(!response.ok){
+              log(`   ❌ URL tidak tersedia (${response.status})`);
+              continue;
+            }
+            
+            const blob = await response.blob();
+            const arrayBuffer = await blob.arrayBuffer();
+            
+            log(`   ✅ Download berhasil (${(arrayBuffer.byteLength / 1024 / 1024).toFixed(2)} MB)`);
+            log('   💾 Menyimpan ke cache...');
+            
+            // Save to IndexedDB for future use
+            try{
+              const db = await new Promise((resolve, reject) => {
+                const request = indexedDB.open('YOLOv8nCache', 1);
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => resolve(request.result);
+                request.onupgradeneeded = (e) => {
+                  const db = e.target.result;
+                  if(!db.objectStoreNames.contains('models')){
+                    db.createObjectStore('models');
+                  }
+                };
+              });
+              
+              await new Promise((resolve, reject) => {
+                const tx = db.transaction('models', 'readwrite');
+                const store = tx.objectStore('models');
+                const request = store.put(arrayBuffer, 'yolov8n.onnx');
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+              });
+              
+              log('   ✅ Model disimpan ke cache');
+            }catch(dbErr){
+              log('   ⚠️ Gagal menyimpan ke cache (tidak kritis)');
+            }
+            
+            return arrayBuffer;
+          }catch(err){
+            log(`   ❌ Download gagal: ${err.message}`);
+            continue;
+          }
+        }
+        
+        throw new Error('Semua sumber download gagal. Model mungkin terlalu besar atau URL tidak tersedia.');
+      }
+
+      // Load COCO SSD model (faster alternative)
+      async function loadCocoSsdModel(){
+        try{
+          if(typeof cocoSsd === 'undefined'){
+            throw new Error('COCO SSD library tidak tersedia');
+          }
+          
+          log('🔄 Loading COCO SSD model...');
+          cocoSsdModel = await cocoSsd.load();
+          log('✅ COCO SSD model loaded successfully');
+          const modelStatusTextEl = document.getElementById('modelStatusText');
+          if(modelStatusTextEl) modelStatusTextEl.textContent = 'COCO SSD Detection';
+          
+          // Update status indicator
+          yoloStatus.classList.add('active');
+          
+          // If camera is already ready, trigger detection start
+          if(video && video.videoWidth > 0 && video.readyState >= 2){
+            log('📹 Camera already ready, attempting to start detection...');
+            setTimeout(() => {
+              // Dispatch event to trigger detection start
+              const evt = new Event('modelready');
+              window.dispatchEvent(evt);
+            }, 100);
+          }
+          
+          return true;
+        }catch(e){
+          log('❌ COCO SSD model load failed: ' + (e.message || e));
+          cocoSsdModel = null;
+          throw e;
+        }
+      }
+      
+      // Model selection handlers
+      async function selectModel(modelType){
+        if(modelType === currentModelType){
+          log(`ℹ️ Model ${modelType} sudah aktif`);
+          return;
+        }
+        
+        // Stop detection if running
+        if(detectionInterval){
+          clearInterval(detectionInterval);
+          detectionInterval = null;
+        }
+        
+        // Unload previous model if needed
+        if(currentModelType === 'yolo' && ortSession){
+          ortSession = null;
+        }
+        if(currentModelType === 'cocossd' && cocoSsdModel){
+          cocoSsdModel = null;
+        }
+        
+        currentModelType = modelType;
+        
+        // Update UI
+        const currentModelEl = document.getElementById('currentModel');
+        if(currentModelEl){
+          currentModelEl.textContent = modelType === 'yolo' ? 'YOLOv8n' : 'COCO SSD';
+        }
+        
+        // Update model status text
+        const modelStatusTextEl = document.getElementById('modelStatusText');
+        if(modelStatusTextEl){
+          modelStatusTextEl.textContent = modelType === 'yolo' ? 'YOLOv8n Detection' : 'COCO SSD Detection';
+        }
+        
+        // Update button states
+        const yoloBtn = document.getElementById('selectYoloBtn');
+        const cocoBtn = document.getElementById('selectCocoBtn');
+        if(yoloBtn && cocoBtn){
+          if(modelType === 'yolo'){
+            yoloBtn.style.background = '#22c55e';
+            yoloBtn.style.color = '#fff';
+            cocoBtn.style.background = '#3b82f6';
+            cocoBtn.style.color = '#fff';
+          } else {
+            cocoBtn.style.background = '#22c55e';
+            cocoBtn.style.color = '#fff';
+            yoloBtn.style.background = '#3b82f6';
+            yoloBtn.style.color = '#fff';
+          }
+        }
+        
+        // Load new model
+        try{
+          if(modelType === 'yolo'){
+            await loadYOLOv8Model();
+            yoloStatus.classList.add('active');
+          } else {
+            await loadCocoSsdModel();
+            yoloStatus.classList.add('active');
+          }
+          log(`✅ Model ${modelType} siap digunakan`);
+          addAlert(`Model ${modelType === 'yolo' ? 'YOLOv8n' : 'COCO SSD'} loaded`);
+        }catch(e){
+          log(`❌ Gagal load model ${modelType}: ${e.message}`);
+          addAlert(`Gagal load model ${modelType}`);
+          yoloStatus.classList.remove('active');
+        }
+      }
+      
+      // YOLO only - no fallback
+
+      async function loadYOLOv8Model(){
+        try{
+          if(typeof ort === 'undefined'){
+            log('Loading ONNX Runtime Web...');
+            await new Promise((resolve, reject) => {
+              const script = document.createElement('script');
+              script.src = 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js';
+              script.onload = resolve;
+              script.onerror = reject;
+              document.head.appendChild(script);
+            });
+          }
+          
+          log('🔄 Loading YOLOv8n model...');
+          
+          // Try loading from public/models/ first
+          const modelPath = '/models/yolov8n.onnx';
+          let modelData = null;
+          
+          try{
+            // Try local file first
+            const response = await fetch(modelPath);
+            if(response.ok){
+              modelData = await response.arrayBuffer();
+              log('✅ Model ditemukan di: /models/yolov8n.onnx');
+            }
+          }catch(e){
+            // File not found locally, try cache
+            log('⚠️ Model tidak ditemukan lokal, cek cache...');
+            
+            try{
+              const db = await new Promise((resolve, reject) => {
+                const request = indexedDB.open('YOLOv8nCache', 1);
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => resolve(request.result);
+                request.onupgradeneeded = (e) => {
+                  const db = e.target.result;
+                  if(!db.objectStoreNames.contains('models')){
+                    db.createObjectStore('models');
+                  }
+                };
+              });
+              
+              modelData = await new Promise((resolve, reject) => {
+                const tx = db.transaction('models', 'readonly');
+                const store = tx.objectStore('models');
+                const request = store.get('yolov8n.onnx');
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+              });
+              
+              if(modelData){
+                log('✅ Model ditemukan di cache');
+              }
+            }catch(cacheErr){
+              log('⚠️ Cache tidak tersedia');
+            }
+            
+            // If still not found, try auto-download
+            if(!modelData){
+              log('📥 Model tidak ada di cache. Mencoba download...');
+              modelData = await downloadYOLOv8Model();
+            }
+          }
+          
+          // Load model from data
+          if(modelData){
+            ortSession = await ort.InferenceSession.create(modelData, { 
+              executionProviders: ['wasm'],
+              graphOptimizationLevel: 'all'
+            });
+            log(`✅ YOLOv8n model loaded successfully`);
+            log(`📊 Input names: ${JSON.stringify(ortSession.inputNames)}`);
+            log(`📊 Output names: ${JSON.stringify(ortSession.outputNames)}`);
+            
+            // Get input/output shapes
+            try{
+              if(ortSession.inputNames && ortSession.inputNames.length > 0){
+                const inputName = ortSession.inputNames[0];
+                const inputMeta = ortSession.inputMetadata?.[inputName];
+                if(inputMeta){
+                  log(`📊 Input shape: ${JSON.stringify(inputMeta.dims || inputMeta.shape)}`);
+                }
+              }
+              if(ortSession.outputNames && ortSession.outputNames.length > 0){
+                const outputName = ortSession.outputNames[0];
+                const outputMeta = ortSession.outputMetadata?.[outputName];
+                if(outputMeta){
+                  log(`📊 Output shape: ${JSON.stringify(outputMeta.dims || outputMeta.shape)}`);
+                } else {
+                  // YOLOv8n standard output: [1, 84, 8400]
+                  log(`📊 Output shape: [1, 84, 8400] (YOLOv8n standard)`);
+                }
+              }
+            }catch(metaErr){
+              log(`⚠️ Metadata access issue (non-critical): ${metaErr.message}`);
+              log(`📊 Expected output shape: [1, 84, 8400] (84 = 4 bbox + 80 classes)`);
+            }
+            yoloStatus.classList.add('active');
+            const modelStatusTextEl = document.getElementById('modelStatusText');
+            if(modelStatusTextEl) modelStatusTextEl.textContent = 'YOLOv8n Detection';
+            log('✅ YOLOv8n siap digunakan untuk deteksi');
+            
+            // Dispatch modelready event to trigger detection start if camera is ready
+            setTimeout(() => {
+              if(video && video.videoWidth > 0 && video.readyState >= 2){
+                log('📹 Camera already ready, dispatching modelready event...');
+              }
+              // Always dispatch event - camera event listener will check if ready
+              const evt = new Event('modelready');
+              window.dispatchEvent(evt);
+            }, 100);
+          } else {
+            throw new Error('Model tidak dapat dimuat');
+          }
+          
+          return true;
+        }catch(e){
+          // Single, clear error message
+          const errMsg = e.message || e.toString();
+          log('═══════════════════════════════════════════════════════');
+          log('❌ YOLOv8n MODEL TIDAK TERSEDIA');
+          log('═══════════════════════════════════════════════════════');
+          log(`Error: ${errMsg}`);
+          log('');
+          
+          // Check if auto-download was attempted
+          if(errMsg.includes('download') || errMsg.includes('sumber') || errMsg.includes('URL')){
+            log('⚠️ Auto-download dicoba tapi gagal.');
+            log('');
+          }
+          
+          log('📋 CARA MENYEDIAKAN MODEL:');
+          log('');
+          log('1️⃣ Convert YOLOv8n ke ONNX (DISARANKAN):');
+          log('   ┌─────────────────────────────────────────┐');
+          log('   │ pip install ultralytics                  │');
+          log('   │                                           │');
+          log('   │ from ultralytics import YOLO              │');
+          log('   │                                           │');
+          log('   │ model = YOLO("yolov8n.pt")                │');
+          log('   │ model.export(format="onnx", imgsz=640)    │');
+          log('   └─────────────────────────────────────────┘');
+          log('');
+          log('2️⃣ Simpan file ke: public/models/yolov8n.onnx');
+          log('   (Folder public/models/ sudah dibuat)');
+          log('');
+          log('3️⃣ Format model yang benar:');
+          log('   • Input:  [1, 3, 640, 640] (RGB, normalized 0-1)');
+          log('   • Output: [1, 84, 8400] atau [1, 8400, 84]');
+          log('   • 84 = 4 (bbox) + 80 (COCO classes)');
+          log('');
+          log('4️⃣ Setelah file ada, REFRESH halaman ini');
+          log('');
+          log('═══════════════════════════════════════════════════════');
+          yoloStatus.classList.remove('active');
+          ortSession = null;
+          throw e; // Throw error agar user tahu harus fix model
+        }
+      }
+
+      // Simple face detection using skin color and symmetry (fallback)
+      function detectFaceSimple(canvas){
+        const ctx = canvas.getContext('2d');
+        const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = img.data;
+        
+        // Simple skin color detection + center region
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const regionSize = Math.min(canvas.width, canvas.height) * 0.3;
+        
+        // Try to find face-like region (skin color in center)
+        let skinPixels = 0;
+        let totalPixels = 0;
+        
+        for(let y = Math.max(0, centerY - regionSize); y < Math.min(canvas.height, centerY + regionSize); y++){
+          for(let x = Math.max(0, centerX - regionSize); x < Math.min(canvas.width, centerX + regionSize); x++){
+            const i = (y * canvas.width + x) * 4;
+            const r = data[i];
+            const g = data[i+1];
+            const b = data[i+2];
+            
+            // Simple skin color detection (human skin color range)
+            if(r > 95 && g > 40 && b > 20 && Math.max(r,g,b) - Math.min(r,g,b) > 15 
+               && Math.abs(r-g) > 15 && r > g && r > b){
+              skinPixels++;
+            }
+            totalPixels++;
+          }
+        }
+        
+        const skinRatio = totalPixels > 0 ? skinPixels / totalPixels : 0;
+        
+        // Always return face region in center (fallback mode assumes face is in center)
+        // Lower threshold for better detection (5% skin pixels in center region)
+        const faceSize = Math.min(canvas.width, canvas.height) * 0.45;
+        const faceX = Math.max(0, centerX - faceSize/2);
+        const faceY = Math.max(0, centerY - faceSize/2);
+        const faceW = Math.min(canvas.width - faceX, faceSize);
+        const faceH = Math.min(canvas.height - faceY, faceSize);
+        
+        // Calculate confidence based on skin ratio, but always return face region
+        const confidence = skinRatio > 0.05 ? skinRatio : 0.6; // Default confidence if no skin detected
+        
+        return {
+          bbox: [faceX, faceY, faceW, faceH],
+          label: 'face',
+          score: confidence
+        };
+      }
+
+      function centerCrop(canvas){
+        const side = Math.min(canvas.width, canvas.height);
+        const sx = Math.floor((canvas.width - side) / 2);
+        const sy = Math.floor((canvas.height - side) / 2);
+        const out = document.createElement('canvas');
+        out.width = out.height = side;
+        const ctx = out.getContext('2d');
+        ctx.drawImage(canvas, sx, sy, side, side, 0, 0, side, side);
+        return out;
+      }
+      
+      // COCO SSD detection function - converts to YOLO-like format
+      async function detectCocoSsd(videoElement){
+        if(!cocoSsdModel){
+          if(!detectCocoSsd._noModelLogged){
+            log('⚠️ COCO SSD: Model not loaded yet');
+            detectCocoSsd._noModelLogged = true;
+          }
+          return [];
+        }
+        
+        if(!videoElement){
+          if(!detectCocoSsd._noVideoLogged){
+            log('⚠️ COCO SSD: Video element not available');
+            detectCocoSsd._noVideoLogged = true;
+          }
+          return [];
+        }
+        
+        // Ensure video is ready
+        if(videoElement.readyState < 2 || videoElement.videoWidth === 0 || videoElement.videoHeight === 0){
+          if(!detectCocoSsd._videoNotReadyLogged){
+            log(`⚠️ COCO SSD: Video not ready - readyState=${videoElement.readyState}, dimensions=${videoElement.videoWidth}x${videoElement.videoHeight}`);
+            detectCocoSsd._videoNotReadyLogged = true;
+          }
+          return [];
+        }
+        
+        try{
+          // COCO SSD expects video element directly - much faster
+          // Reset error flags if we get here
+          detectCocoSsd._noModelLogged = false;
+          detectCocoSsd._noVideoLogged = false;
+          detectCocoSsd._videoNotReadyLogged = false;
+          
+          // Call COCO SSD detect (no verbose logging)
+          const predictions = await cocoSsdModel.detect(videoElement);
+          
+          // Convert COCO SSD format to YOLO-like format
+          const detections = [];
+          // COCO SSD class names are case-sensitive: 'cell phone', not 'cellphone'
+          const anomalyClasses = new Set([
+            'cell phone', 'mobile phone', 'book', 'laptop', 'mouse', 'keyboard', 
+            'remote', 'clock', 'tv', 'television', 'bottle', 'cup', 'wine glass',
+            'cup', 'handbag', 'backpack', 'umbrella', 'sports ball', 'calculator',
+            'headphone', 'keyboard', 'mouse', 'remote'
+          ]);
+          
+          // Process all predictions - COCO SSD format: {bbox: [x, y, width, height], class, score}
+          // bbox is in pixel coordinates: [x, y, width, height] where x,y = top-left corner
+          for(let i = 0; i < predictions.length; i++){
+            const pred = predictions[i];
+            
+            // Get class name and score - COCO SSD uses 'class' property
+            const className = pred.class || pred.className || 'unknown';
+            const label = className.toLowerCase();
+            const score = pred.score || pred.confidence || 0;
+            
+            // Get bbox - COCO SSD format: [x, y, width, height] in pixels
+            let bbox = pred.bbox;
+            if(!bbox || !Array.isArray(bbox) || bbox.length < 4){
+              // Skip if bbox is invalid
+              if(!detectCocoSsd._invalidBboxLogged && i < 3){
+                log(`⚠️ COCO SSD: Invalid bbox for ${className}: ${JSON.stringify(pred)}`);
+                if(i === 2) detectCocoSsd._invalidBboxLogged = true;
+              }
+              continue;
+            }
+            
+            // COCO SSD bbox: [x, y, width, height] in pixel coordinates
+            const x = bbox[0];
+            const y = bbox[1];
+            const width = bbox[2];  // width
+            const height = bbox[3]; // height
+            
+            // Validate bbox values - must be positive
+            if(width <= 0 || height <= 0 || x < 0 || y < 0){
+              if(!detectCocoSsd._invalidDimsLogged && i < 3){
+                log(`⚠️ COCO SSD: Invalid dimensions for ${className}: x=${x}, y=${y}, w=${width}, h=${height}`);
+                if(i === 2) detectCocoSsd._invalidDimsLogged = true;
+              }
+              continue;
+            }
+            
+            // Check if anomaly class - use original class name (case-sensitive)
+            const isAnomaly = anomalyClasses.has(className) || anomalyClasses.has(label);
+            const isPerson = className === 'person' || label === 'person';
+            const isImportant = isPerson || isAnomaly;
+            
+            // Lower threshold for COCO SSD - it's conservative by default
+            // Accept all predictions with score >= 0.1
+            const minScore = 0.1;
+            if(score >= minScore){
+              // Store bbox as [x, y, width, height] - same as COCO SSD format
+              detections.push({
+                bbox: [x, y, width, height], // [x, y, width, height] in pixel coordinates
+                label: label,
+                score: Math.max(0, Math.min(1, score)), // Ensure 0-1 range
+                isImportant: isImportant,
+                isAnomaly: isAnomaly,
+                isPerson: isPerson, // Add flag for person detection
+                classId: -1 // COCO SSD doesn't provide class ID
+              });
+            } else if(!detectCocoSsd._lowScoreLogged && i < 5){
+              // Log low score detections for debugging
+              log(`⚠️ COCO SSD: Low score for ${className}: score=${score.toFixed(3)} (min=${minScore})`);
+              if(i === 4) detectCocoSsd._lowScoreLogged = true;
+            }
+          }
+          
+          return detections;
+        }catch(e){
+          log('❌ COCO SSD detection error: ' + (e.message || e));
+          console.error('COCO SSD detection error:', e);
+          console.error('Stack:', e.stack);
+          // Log additional debug info
+          if(videoElement){
+            log(`   Video element: readyState=${videoElement.readyState}, dimensions=${videoElement.videoWidth}x${videoElement.videoHeight}`);
+          }
+          return [];
+        }
+      }
+
+      // Track if detection is in progress to skip overlapping calls
+      let detectionInProgress = false;
+      
+      async function runDetection(){
+        // Skip if detection is already running (prevents overlap)
+        if(detectionInProgress){
+          return;
+        }
+        
+        if(!video || video.videoWidth === 0 || !detectionCanvas){
+          // Log only once to avoid spam
+          if(!runDetection._skipLogged){
+            log('⚠️ Detection skipped: video not ready');
+            runDetection._skipLogged = true;
+          }
+          return;
+        }
+        
+        // Check if model is loaded based on current model type
+        if(currentModelType === 'yolo' && !ortSession){
+          // Log only once to avoid spam
+          if(!runDetection._noModelLogged){
+            log('⚠️ Detection skipped: YOLOv8n model not loaded');
+            runDetection._noModelLogged = true;
+          }
+          return;
+        }
+        
+        if(currentModelType === 'cocossd' && !cocoSsdModel){
+          // Log only once to avoid spam
+          if(!runDetection._noModelLogged){
+            log('⚠️ Detection skipped: COCO SSD model not loaded');
+            runDetection._noModelLogged = true;
+          }
+          return;
+        }
+        
+        // Mark detection as in progress
+        detectionInProgress = true;
+        
+        // Reset skip flags if conditions are met
+        runDetection._skipLogged = false;
+        runDetection._noModelLogged = false;
+        
+        detectionCanvas.width = video.videoWidth;
+        detectionCanvas.height = video.videoHeight;
+        detectionCtx.drawImage(video, 0, 0);
+        
+        // Sync overlay canvas size
+        overlayCanvas.width = video.videoWidth;
+        overlayCanvas.height = video.videoHeight;
+        if(!overlayCtx) overlayCtx = overlayCanvas.getContext('2d');
+        
+        // Clear overlay canvas before drawing new detections (important for both YOLO and COCO SSD)
+        overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+        overlayCanvas.style.display = 'block';
+        
+        let detections = [];
+        let faceCanvas = null;
+        let verified = null;
+        let faceForVerification = null;
+        
+        try{
+          const t0 = performance.now();
+          let inferenceTime = 0; // Initialize inferenceTime outside if/else to avoid scope issues
+          
+          // Run detection based on current model type
+          if(currentModelType === 'yolo'){
+            // YOLOv8n detection
+            const size = 640;
+            const input = preprocessCanvas(detectionCanvas, size);
+            const inputName = ortSession.inputNames ? ortSession.inputNames[0] : 'images';
+            const feeds = {};
+            feeds[inputName] = new ort.Tensor('float32', input.data, [1, 3, size, size]);
+            
+            const output = await ortSession.run(feeds);
+            const t1 = performance.now();
+            inferenceTime = t1 - t0;
+            
+            const outName = Object.keys(output)[0];
+            const tensor = output[outName];
+            const logits = tensor.data;
+            const outputShape = tensor.dims;
+            const data = logits instanceof Float32Array ? logits : Array.from(logits);
+            
+            detections = postprocessYOLO(data, detectionCanvas.width, detectionCanvas.height, outputShape);
+            
+            // Track inference time for metrics
+            inferenceTimes.push(inferenceTime);
+          } else if(currentModelType === 'cocossd'){
+            // COCO SSD detection (faster - works directly with video element)
+            // Call detection - detectCocoSsd handles validation internally
+            detections = await detectCocoSsd(video);
+            
+            const t1 = performance.now();
+            inferenceTime = t1 - t0;
+            
+            // Track inference time for metrics
+            inferenceTimes.push(inferenceTime);
+          }
+          if(inferenceTimes.length > 30) inferenceTimes.shift(); // Keep last 30
+          
+          // Update inference time metric (moving average) - optimized calculation
+          let sum = 0;
+          for(let i = 0; i < inferenceTimes.length; i++){
+            sum += inferenceTimes[i];
+          }
+          const avgInferenceTime = inferenceTimes.length > 0 ? sum / inferenceTimes.length : 0;
+          const infEl = document.getElementById('inf');
+          if(infEl) infEl.textContent = avgInferenceTime.toFixed(1) + 'ms';
+          
+          // Update inference time chart
+          if(inferenceTime > 0) {
+            updateChart('infChart', inferenceTime, infChartData, Math.max(...inferenceTimes) * 1.5 || 1000, '#3b82f6');
+          }
+          
+          // Update FPS
+          const now = performance.now();
+          fpsCounter.frames++;
+          if(now - fpsCounter.lastTime >= 1000){
+            fpsCounter.fps = fpsCounter.frames;
+            fpsCounter.frames = 0;
+            fpsCounter.lastTime = now;
+            const fpsEl = document.getElementById('fps');
+            if(fpsEl) fpsEl.textContent = fpsCounter.fps;
+            
+            // Update FPS chart
+            updateChart('fpsChart', fpsCounter.fps, fpsChartData, 30, '#22c55e');
+            
+            // Update CPU Usage
+            updateCPUUsage(now);
+          }
+          
+          // Track CPU usage per detection
+          trackCPUUsage(inferenceTime);
+          
+          // Log inference time (first few times only)
+          if(!runDetection._inferenceLogged || runDetection._inferenceCount < 3){
+            log(`⚡ Inference completed (${currentModelType === 'yolo' ? 'YOLOv8n' : 'COCO SSD'}) in ${inferenceTime.toFixed(1)}ms`);
+            runDetection._inferenceLogged = true;
+            runDetection._inferenceCount = (runDetection._inferenceCount || 0) + 1;
+          }
+          
+          // Optimized logging - single pass instead of multiple filters
+          if(detections.length > 0 && (!runDetection._lastDetLog || Date.now() - runDetection._lastDetLog > 1000)){
+            const importantLabels = [];
+            const otherLabels = [];
+            
+            // Single loop to categorize instead of multiple filters
+            for(let i = 0; i < detections.length; i++){
+              const det = detections[i];
+              const label = `${det.label}(${(det.score*100).toFixed(0)}%)`;
+              if(det.isImportant){
+                importantLabels.push(label);
+              } else {
+                otherLabels.push(label);
+              }
+            }
+            
+            log(`✅ Detected ${detections.length} objects:`);
+            if(importantLabels.length > 0){
+              log(`   🎯 Important: ${importantLabels.join(', ')}`);
+            }
+            if(otherLabels.length > 0){
+              log(`   📦 Others: ${otherLabels.join(', ')}`);
+            }
+            runDetection._lastDetLog = Date.now();
+          }
+        }catch(e){
+          log('❌ Detection error: ' + (e.message || e));
+          console.error('Detection error details:', e);
+          // Don't stop detection loop on error, just log it
+        } finally {
+          // Always release the lock when done
+          detectionInProgress = false;
+        }
+        
+        // Get face/person for verification - works with both models
+        const modelReady = (currentModelType === 'yolo' && ortSession) || (currentModelType === 'cocossd' && cocoSsdModel);
+        if(!modelReady){
+          log(`❌ ${currentModelType === 'yolo' ? 'YOLOv8n' : 'COCO SSD'} tidak tersedia - sistem tidak bisa mendeteksi`);
+          faceForVerification = null;
+        } else if(detections.length > 0){
+          // Optimized: find largest person in single pass instead of filter + reduce
+          let largestPerson = null;
+          let largestArea = 0;
+          for(let i = 0; i < detections.length; i++){
+            const det = detections[i];
+            if(det.label === 'person'){
+              const detArea = area(det.bbox);
+              if(detArea > largestArea){
+                largestArea = detArea;
+                largestPerson = det;
+              }
+            }
+          }
+          
+          faceForVerification = largestPerson;
+          if(faceForVerification){
+            log(`👤 Person detected for verification: Yes`);
+          } else {
+            const modelName = currentModelType === 'yolo' ? 'YOLOv8n' : 'COCO SSD';
+            log(`⚠️ No person detected by ${modelName}`);
+          }
+        } else {
+          const modelName = currentModelType === 'yolo' ? 'YOLOv8n' : 'COCO SSD';
+          log(`⚠️ No detections from ${modelName}`);
+        }
+        
+        // ONE-SHOT VERIFICATION: Run once per minute (not every YOLO detection)
+        const now = Date.now();
+        const lastVerificationTime = runDetection._lastVerificationTime || 0;
+        const verificationInterval = 5 * 1000; // 1 minute in ms
+        
+        if(now - lastVerificationTime >= verificationInterval){
+          runDetection._lastVerificationTime = now;
+          
+          if(faceForVerification){
+            const [x,y,w,h] = faceForVerification.bbox;
+            faceCanvas = document.createElement('canvas');
+            faceCanvas.width = Math.max(1, Math.floor(w));
+            faceCanvas.height = Math.max(1, Math.floor(h));
+            const ctx = faceCanvas.getContext('2d');
+            ctx.drawImage(detectionCanvas, Math.max(0, Math.floor(x)), Math.max(0, Math.floor(y)), Math.floor(w), Math.floor(h), 0, 0, faceCanvas.width, faceCanvas.height);
+            
+            // Verify identity - THIS IS THE ONE-SHOT LEARNING VERIFICATION (once per minute)
+            verified = await verifyOneShot(faceCanvas);
+            if(verified){
+              currentVerification = { ...verified, bbox: faceForVerification.bbox };
+              const statusText = verified.match 
+                ? `✅ MATCH - ${verified.name || 'Unknown'} (${(verified.score*100).toFixed(0)}%)`
+                : `❌ NO MATCH - Bukan ${verified.name || 'Unknown'} (${(verified.score*100).toFixed(0)}%)`;
+              identityResult.textContent = statusText;
+              identityResult.style.color = verified.match ? '#16a34a' : '#dc2626';
+              identityStatus.classList.add('active');
+              
+              if(verified.match){
+                log(`✅ Identity verified: ${verified.name || 'Unknown'} - Score: ${(verified.score*100).toFixed(1)}% (MATCH)`);
+              } else {
+                log(`❌ Identity mismatch: Score only ${(verified.score*100).toFixed(1)}% (below threshold)`);
+              }
+            } else {
+              log('⚠️ Cannot verify: No enrollment found');
+            }
+          } else {
+            // Last resort: center crop for verification (when no face detected)
+            log('⚠️ No face detected, using center crop for verification...');
+            faceCanvas = centerCrop(detectionCanvas);
+            verified = await verifyOneShot(faceCanvas);
+            if(verified){
+              currentVerification = { ...verified, bbox: null };
+              const statusText = verified.match 
+                ? `✅ MATCH - ${verified.name || 'Unknown'} (${(verified.score*100).toFixed(0)}%)`
+                : `❌ NO MATCH - Bukan ${verified.name || 'Unknown'} (${(verified.score*100).toFixed(0)}%)`;
+              identityResult.textContent = statusText;
+              identityResult.style.color = verified.match ? '#16a34a' : '#dc2626';
+              identityStatus.classList.add('active');
+              
+              if(verified.match){
+                log(`✅ Identity verified (center crop): ${verified.name || 'Unknown'} - Score: ${(verified.score*100).toFixed(1)}%`);
+              }
+            }
+          }
+        } else {
+          // Keep using last verification result if within 1 minute
+          if(currentVerification){
+            verified = currentVerification;
+          }
+        }
+        
+        if(!verified){
+          currentVerification = null;
+          identityResult.textContent = '⚠️ No enrollment found';
+          identityResult.style.color = '#f59e0b';
+          identityStatus.classList.remove('active');
+        }
+        
+        // Draw ALL detections with color coding (works for both YOLO and COCO SSD)
+        if(detections.length > 0){
+          detections.forEach(det => {
+            // Extract bbox coordinates
+            // YOLO format: [x, y, w, h] - already in pixel coordinates relative to video
+            // COCO SSD format: [x, y, width, height] - already in pixel coordinates relative to video
+            const [x, y, w, h] = det.bbox;
+            
+            // Scale coordinates from video dimensions to overlay canvas dimensions
+            // Both YOLO and COCO SSD return bbox in video pixel coordinates
+            const scaleX = overlayCanvas.width / video.videoWidth;
+            const scaleY = overlayCanvas.height / video.videoHeight;
+            const sx = x * scaleX;
+            const sy = y * scaleY;
+            const sw = w * scaleX;
+            const sh = h * scaleY;
+            
+            // Color coding based on detection type
+            let color = '#3b82f6'; // Blue for normal objects
+            let isVerified = false;
+            
+            if(det === faceForVerification && verified && verified.match){
+              // Verified person - GREEN
+              color = '#22c55e';
+              isVerified = true;
+            } else if(det.isImportant && det.label !== 'person'){
+              // Anomalies: cell phone, laptop - RED
+              color = '#dc2626';
+            } else if(det.label === 'person'){
+              // Unverified person - YELLOW
+              color = '#f59e0b';
+            }
+            
+            // Draw box
+            overlayCtx.strokeStyle = color;
+            overlayCtx.lineWidth = isVerified ? 5 : (det.isImportant ? 4 : 3);
+            overlayCtx.strokeRect(sx, sy, sw, sh);
+            
+            // Draw label
+            let labelText;
+            if(isVerified){
+              labelText = `✅ ${verified.name || 'Alex'} - MATCH (${(verified.score*100).toFixed(0)}%)`;
+            } else if(det.isImportant){
+              labelText = `⚠️ ${det.label} ${(det.score*100).toFixed(0)}%`;
+            } else {
+              labelText = `${det.label} ${(det.score*100).toFixed(0)}%`;
+            }
+            
+            overlayCtx.fillStyle = color;
+            overlayCtx.font = isVerified ? 'bold 16px Arial' : 'bold 14px Arial';
+            const textWidth = overlayCtx.measureText(labelText).width;
+            overlayCtx.fillRect(sx, sy - (isVerified ? 26 : 22), textWidth + 10, isVerified ? 26 : 22);
+            
+            overlayCtx.fillStyle = '#fff';
+            overlayCtx.fillText(labelText, sx + 5, sy - (isVerified ? 8 : 7));
+          });
+                } else {
+          // Clear overlay if no detections
+          overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+        }
+        
+        // Optimized counting - single pass instead of multiple filters
+        let personCount = 0;
+        let objectCount = 0;
+        let anomalyCount = 0;
+        
+        // Single loop instead of multiple filter operations
+        for(let i = 0; i < detections.length; i++){
+          const det = detections[i];
+          if(det.label === 'person'){
+            personCount++;
+          } else {
+            objectCount++;
+          }
+          if(det.isImportant && det.label !== 'person'){
+            anomalyCount++;
+          }
+        }
+        
+        // Batch DOM updates using requestAnimationFrame for smoother performance
+        requestAnimationFrame(() => {
+          const personsEl = document.getElementById('persons');
+          const objectsEl = document.getElementById('objects');
+          if(personsEl) personsEl.textContent = personCount;
+          if(objectsEl) objectsEl.textContent = objectCount;
+        });
+        
+        const detInfo = document.getElementById('detInfo');
+        // Check model availability based on current model type
+        const isModelAvailable = (currentModelType === 'yolo' && ortSession) || (currentModelType === 'cocossd' && cocoSsdModel);
+        
+        if(isModelAvailable){
+          // Optimized string building
+          const statusParts = [];
+          if(verified && verified.match){
+            statusParts.push(`✅ ${verified.name || 'Alex'} - MATCH`);
+          }
+          if(personCount > 0) statusParts.push(`Persons: ${personCount}`);
+          if(anomalyCount > 0) statusParts.push(`⚠️ Anomalies: ${anomalyCount}`);
+          if(objectCount > 0) statusParts.push(`Objects: ${objectCount}`);
+          
+          const modelName = currentModelType === 'yolo' ? 'YOLOv8n' : 'COCO SSD';
+          if(detInfo){
+            detInfo.textContent = statusParts.length > 0 
+              ? `${modelName} Active | ${statusParts.join(' | ')}`
+              : `${modelName} Active | No detections`;
+          }
+        } else {
+          const modelName = currentModelType === 'yolo' ? 'YOLOv8n' : 'COCO SSD';
+          if(detInfo) detInfo.textContent = `❌ ${modelName} tidak tersedia - Sistem tidak bisa mendeteksi`;
+        }
+      }
+
+      function preprocessCanvas(canvas, size){
+        // Optimized preprocessing with object pooling for memory efficiency
+        // YOLOv8n expects: [1, 3, 640, 640] format with RGB channels normalized 0-1
+        // Reuse canvas from pool instead of creating new one
+        const tmp = objectPool.getPreprocessCanvas(size);
+        const ctx = tmp.getContext('2d');
+        
+        // Use low quality smoothing for maximum performance
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'low'; // Fastest option, still acceptable quality for detection
+        
+        // Calculate aspect ratio to maintain it during resize
+        const canvasAspect = canvas.width / canvas.height;
+        const targetAspect = size / size;
+        
+        let sx = 0, sy = 0, sw = canvas.width, sh = canvas.height;
+        let dx = 0, dy = 0, dw = size, dh = size;
+        
+        // Center crop to maintain aspect ratio for better detection
+        if (canvasAspect > targetAspect) {
+          // Canvas is wider - crop width
+          sw = canvas.height * targetAspect;
+          sx = (canvas.width - sw) / 2;
+        } else {
+          // Canvas is taller - crop height
+          sh = canvas.width / targetAspect;
+          sy = (canvas.height - sh) / 2;
+        }
+        
+        // Clear canvas with black background (helps with normalization)
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, size, size);
+        
+        // Draw image centered and scaled
+        ctx.drawImage(canvas, sx, sy, sw, sh, dx, dy, dw, dh);
+        
+        const img = ctx.getImageData(0, 0, size, size);
+        
+        // YOLOv8n format: [batch, channels, height, width]
+        // Channel order: RGB (not BGR)
+        // Normalize: 0-255 -> 0-1
+        // Optimized: reuse buffer from pool instead of allocating new one
+        const bufferLength = size * size * 3;
+        const data = objectPool.getDataBuffer(bufferLength);
+        const pixels = img.data;
+        const pixelCount = size * size;
+        const inv255 = 1.0 / 255.0; // Pre-compute division
+        
+        // HWC -> CHW conversion, normalize 0..1
+        // Optimized loop: batch operations for better performance
+        let idx = 0;
+        for(let i = 0; i < pixels.length; i += 4){
+          // Batch normalize and store (faster than individual operations)
+          const r = pixels[i] * inv255;
+          const g = pixels[i + 1] * inv255;
+          const b = pixels[i + 2] * inv255;
+          
+          data[idx] = r;                    // R channel
+          data[idx + pixelCount] = g;        // G channel
+          data[idx + pixelCount * 2] = b;    // B channel
+          idx++;
+        }
+        
+        return { data };
+      }
+
+      function postprocessYOLO(output, imgW, imgH, outputShape = null){
+        // YOLOv8n output format:
+        // Standard: [1, 84, 8400] atau [1, 8400, 84]
+        // 84 = 4 (x_center, y_center, w, h) + 80 (COCO classes)
+        // 8400 = grid cells (80*80, 40*40, 20*20 combined)
+        // Use pooled array to reduce allocations
+        const detections = objectPool.clearDetections();
+        // Optimized thresholds for camera input detection
+        // Adjusted to reduce false positives (especially person misdetection)
+        const threshold = 0.25; // Higher threshold for general objects to reduce false positives
+        const anomalyThreshold = 0.2; // Threshold for anomalies (cellphone, laptop, etc.)
+        const personThreshold = 0.3; // Higher threshold specifically for person to reduce false positives
+        const numClasses = 80;
+        const stride = 4 + numClasses; // 84
+        
+        // Normalize to array - optimized: work with typed arrays directly, avoid Array.from() when possible
+        // Reuse existing buffer or work directly with typed array to reduce allocations
+        let data;
+        if(Array.isArray(output)){
+          data = output;
+        } else if(output instanceof Float32Array || output instanceof Uint8Array){
+          // Work directly with typed array - faster and uses less memory
+          data = output;
+        } else {
+          // Fallback: convert to array only if necessary
+          data = Array.from(output);
+        }
+        if(data.length < stride) return detections; // Too small
+        
+        // Determine shape - YOLOv8n standard shapes
+        let boxes = 0;
+        let features = 0;
+        
+        if(outputShape && outputShape.length === 3){
+          // Shape: [batch, features, boxes] atau [batch, boxes, features]
+          const [, dim1, dim2] = outputShape;
+          
+          // YOLOv8n standard: [1, 84, 8400]
+          if(dim1 === stride && dim2 === 8400){
+            // [1, 84, 8400] format - need transpose
+            boxes = dim2; // 8400
+            features = dim1; // 84
+          } else if(dim2 === stride && dim1 === 8400){
+            // [1, 8400, 84] format - already correct
+            boxes = dim1; // 8400
+            features = dim2; // 84
+          } else if(dim1 === stride){
+            // [1, 84, boxes] format
+            boxes = dim2;
+            features = dim1;
+          } else if(dim2 === stride){
+            // [1, boxes, 84] format
+            boxes = dim1;
+            features = dim2;
+                } else {
+            // Try to infer from data length
+            boxes = Math.floor(data.length / stride);
+            features = stride;
+          }
+        } else {
+          // Infer from data length
+          boxes = Math.floor(data.length / stride);
+          features = stride;
+        }
+        
+        // Handle format [1, 84, 8400] - transpose to [boxes, features]
+        // YOLOv8n exports as [1, 84, 8400] where data layout is: [f0_b0, f0_b1, ..., f0_b8399, f1_b0, ..., f83_b8399]
+        // We need: [b0_f0, b0_f1, ..., b0_f83, b1_f0, ..., b8399_f83]
+        let processedData = data;
+        if(outputShape && outputShape.length === 3){
+          const [, dim1, dim2] = outputShape;
+          
+          // Format [1, 84, 8400] - features first, then boxes
+          if(dim1 === stride && dim2 === boxes){
+            // Use pooled buffer if available to reduce allocations
+            const bufferLength = boxes * features;
+            if(!objectPool.postprocessBuffer || objectPool.postprocessBuffer.length !== bufferLength){
+              objectPool.postprocessBuffer = new Array(bufferLength);
+            }
+            processedData = objectPool.postprocessBuffer;
+            
+            // Optimized transpose: calculate base index once per box
+            for(let b = 0; b < boxes; b++){
+              const baseDstIdx = b * features;
+              for(let f = 0; f < features; f++){
+                const srcIdx = f * boxes + b;
+                const dstIdx = baseDstIdx + f;
+                if(srcIdx < data.length && dstIdx < processedData.length){
+                  processedData[dstIdx] = data[srcIdx];
+                }
+              }
+            }
+          }
+          // Format [1, 8400, 84] - boxes first, then features (already correct)
+          // No transpose needed, data is already in correct order
+        }
+        
+        const cocoClasses = ['person','bicycle','car','motorcycle','airplane','bus','train','truck','boat','traffic light','fire hydrant','stop sign','parking meter','bench','bird','cat','dog','horse','sheep','cow','elephant','bear','zebra','giraffe','backpack','umbrella','handbag','tie','suitcase','frisbee','skis','snowboard','sports ball','kite','baseball bat','baseball glove','skateboard','surfboard','tennis racket','bottle','wine glass','cup','fork','knife','spoon','bowl','banana','apple','sandwich','orange','broccoli','carrot','hot dog','pizza','donut','cake','chair','couch','potted plant','bed','dining table','toilet','tv','laptop','mouse','remote','keyboard','cell phone','microwave','oven','toaster','sink','refrigerator','book','clock','vase','scissors','teddy bear','hair drier','toothbrush'];
+        
+        // Process each box
+        let totalChecked = 0;
+        let validBoxes = 0;
+        
+        for(let boxIdx = 0; boxIdx < boxes; boxIdx++){
+          const baseIdx = boxIdx * features;
+          if(baseIdx + stride > processedData.length) break;
+          
+          totalChecked++;
+          
+          // Bbox coords: x_center, y_center, width, height
+          // YOLOv8 outputs normalized coordinates (0-1) for 640x640 input
+          let xc_raw = processedData[baseIdx];
+          let yc_raw = processedData[baseIdx + 1];
+          let w_raw = processedData[baseIdx + 2];
+          let h_raw = processedData[baseIdx + 3];
+          
+          // Check if coordinates are already normalized (0-1) or in pixel format
+          // If values are > 1, they're likely in pixel format relative to 640x640
+          let xc_norm, yc_norm, w_norm, h_norm;
+          if(Math.abs(xc_raw) > 1 || Math.abs(yc_raw) > 1 || Math.abs(w_raw) > 1 || Math.abs(h_raw) > 1){
+            // Pixel format (relative to 640x640) - normalize to 0-1
+            xc_norm = xc_raw / 640;
+            yc_norm = yc_raw / 640;
+            w_norm = w_raw / 640;
+            h_norm = h_raw / 640;
+          } else {
+            // Already normalized
+            xc_norm = xc_raw;
+            yc_norm = yc_raw;
+            w_norm = w_raw;
+            h_norm = h_raw;
+          }
+          
+          // Clamp to valid range
+          xc_norm = Math.max(0, Math.min(1, xc_norm));
+          yc_norm = Math.max(0, Math.min(1, yc_norm));
+          w_norm = Math.max(0.01, Math.min(1, w_norm));
+          h_norm = Math.max(0.01, Math.min(1, h_norm));
+          
+          // Convert to pixel coordinates in actual image
+          const xc = xc_norm * imgW;
+          const yc = yc_norm * imgH;
+          const w = w_norm * imgW;
+          const h = h_norm * imgH;
+          
+          // Very lenient validation - prioritize detection over strict validation
+          // Only skip boxes that are clearly invalid
+          if(w < 1 || h < 1) continue; // Too small (minimum 1 pixel)
+          if(w > imgW * 5 || h > imgH * 5) continue; // Extremely too large
+          // Allow center anywhere near image (very lenient bounds)
+          if(xc < -imgW || xc > imgW * 2 || yc < -imgH || yc > imgH * 2) continue;
+          
+          // Find max confidence class
+          // YOLOv8 output scores might need sigmoid/softmax, but let's check raw values first
+          let maxConf = 0;
+          let maxClass = -1;
+          let maxConfRaw = 0; // Keep raw value for debugging
+          
+          for(let clsIdx = 0; clsIdx < numClasses; clsIdx++){
+            let confRaw = processedData[baseIdx + 4 + clsIdx];
+            let conf = confRaw;
+            
+            // Apply sigmoid if confidence seems to be in logit form (values > 10 or < 0)
+            // For YOLOv8, scores are typically already normalized, but check anyway
+            if(Math.abs(confRaw) > 10){
+              // Likely logits - apply sigmoid
+              conf = 1 / (1 + Math.exp(-confRaw));
+            } else if(confRaw < 0){
+              // Negative values - apply sigmoid
+              conf = 1 / (1 + Math.exp(-confRaw));
+            }
+            // Clamp to 0-1 range
+            conf = Math.max(0, Math.min(1, conf));
+            
+            if(conf > maxConf){
+              maxConf = conf;
+              maxClass = clsIdx;
+              maxConfRaw = confRaw;
+            }
+          }
+          
+          // Debug: log first few high-confidence boxes (before validation)
+          if(maxConf > threshold * 0.5 && (!postprocessYOLO._highConfLogged || postprocessYOLO._highConfCount < 5)){
+            if(!postprocessYOLO._highConfLogged) postprocessYOLO._highConfLogged = true, postprocessYOLO._highConfCount = 0;
+            postprocessYOLO._highConfCount++;
+            log(`🔍 [DEBUG] Box ${boxIdx}: rawConf=${maxConfRaw.toFixed(3)}, normConf=${maxConf.toFixed(3)}, class=${maxClass}, threshold=${threshold}, coords: xc=${xc.toFixed(1)}, yc=${yc.toFixed(1)}, w=${w.toFixed(1)}, h=${h.toFixed(1)}`);
+          }
+          
+          // Expanded anomaly classes for better detection
+          // Anomaly classes: cell phone, book, laptop, mouse, keyboard, remote, clock, 
+          // bottle, wine glass, cup, tv, handbag, backpack, umbrella, sports ball
+          const anomalyClasses = new Set([67, 73, 63, 62, 64, 70, 75, 39, 40, 41, 69, 31, 26, 27, 47]);
+          const isAnomaly = anomalyClasses.has(maxClass);
+          
+          // Use higher threshold for person to reduce false positives
+          // Use anomaly threshold for anomaly objects
+          // Use general threshold for other objects
+          let useThreshold;
+          if(maxClass === 0) {
+            useThreshold = personThreshold; // Person needs higher confidence
+          } else if(isAnomaly) {
+            useThreshold = anomalyThreshold;
+          } else {
+            useThreshold = threshold;
+          }
+          
+          // Apply NMS threshold and class filter
+          // DEBUG: Log first few boxes that pass confidence threshold
+          if(maxConf > useThreshold && maxClass >= 0 && maxClass < numClasses){
+            // Convert center coords to top-left coords
+            let x = xc - w/2;
+            let y = yc - h/2;
+            let boxW = w;
+            let boxH = h;
+            
+            // Clamp to image bounds (but keep original size for small overflows)
+            x = Math.max(-w*0.5, Math.min(imgW - w*0.5, x));
+            y = Math.max(-h*0.5, Math.min(imgH - h*0.5, y));
+            
+            // Final clamp to ensure box is within or slightly outside image
+            const finalX = Math.max(0, Math.min(imgW - 1, x));
+            const finalY = Math.max(0, Math.min(imgH - 1, y));
+            const finalW = Math.max(1, Math.min(imgW - finalX, boxW));
+            const finalH = Math.max(1, Math.min(imgH - finalY, boxH));
+            
+            // Only skip if box is completely invalid after clamping
+            if(finalW < 1 || finalH < 1) {
+              continue;
+            }
+            
+            validBoxes++;
+            
+            // COCO class mapping
+            let label = 'object';
+            if(maxClass === 0) label = 'person';
+            else if(maxClass < cocoClasses.length){
+              label = cocoClasses[maxClass];
+            }
+            
+            // IMPORTANT: Validate person detections to reduce false positives
+            // If detection is labeled as "person" but has characteristics of cellphone/object, verify
+            if(label === 'person' && maxClass === 0){
+              const aspectRatio = finalW / finalH;
+              const area = finalW * finalH;
+              const imgArea = imgW * imgH;
+              const relativeArea = area / imgArea;
+              
+              // Cellphone characteristics: small area, tall aspect ratio (portrait)
+              // Person characteristics: larger area, usually portrait but not extreme
+              const isLikelyCellphone = relativeArea < 0.01 && aspectRatio < 0.5; // Very small and tall
+              const isLikelyObject = relativeArea < 0.005; // Extremely small
+              
+              // Check if there's a better match in anomaly classes
+              // Look at second-best class if person confidence is borderline
+              if(isLikelyCellphone || (isLikelyObject && maxConf < 0.5)){
+                // Re-check all classes for better match
+                let bestAnomalyConf = 0;
+                let bestAnomalyClass = -1;
+                for(let c = 0; c < numClasses; c++){
+                  if(anomalyClasses.has(c)){
+                    let conf = processedData[baseIdx + 4 + c];
+                    if(Math.abs(conf) > 10) conf = 1 / (1 + Math.exp(-conf));
+                    else if(conf < 0) conf = 1 / (1 + Math.exp(-conf));
+                    conf = Math.max(0, Math.min(1, conf));
+                    
+                    if(conf > bestAnomalyConf && conf > anomalyThreshold){
+                      bestAnomalyConf = conf;
+                      bestAnomalyClass = c;
+                    }
+                  }
+                }
+                
+                // If anomaly class has higher or similar confidence, prefer it
+                if(bestAnomalyClass >= 0 && bestAnomalyConf >= maxConf * 0.7){
+                  // Use anomaly class instead
+                  label = cocoClasses[bestAnomalyClass] || 'object';
+                  maxClass = bestAnomalyClass;
+                  maxConf = bestAnomalyConf;
+                  isAnomaly = true;
+                }
+              }
+            }
+            
+            // Important objects for proctoring: person and all anomaly objects
+            const isImportant = label === 'person' || isAnomaly;
+            
+            detections.push({
+              bbox: [finalX, finalY, finalW, finalH],
+              label: label,
+              score: maxConf,
+              isImportant: isImportant,
+              classId: maxClass
+            });
+          }
+        }
+        
+        // Simple NMS: keep top confidences, filter overlapping boxes
+        detections.sort((a,b) => b.score - a.score);
+        
+        // Debug logging (first call only)
+        if(!postprocessYOLO._debugLogged && typeof log === 'function'){
+          log(`🔍 [DEBUG] Postprocess: checked ${totalChecked} boxes, valid ${validBoxes}, detections ${detections.length}, threshold=${threshold}, shape=[${boxes}, ${features}]`);
+          
+          // Check max confidence across ALL boxes to see if we're getting any signal
+          let maxConfFound = 0;
+          let maxConfClass = -1;
+          let maxConfBox = -1;
+          
+          // Scan all boxes (not just 100) to find actual max confidence
+          // Apply same normalization as in detection loop
+          for(let b = 0; b < boxes; b++){
+            const baseIdx = b * features;
+            if(baseIdx + stride > processedData.length) break;
+            
+            for(let c = 4; c < stride; c++){
+              let conf = processedData[baseIdx + c];
+              
+              // Apply same normalization as detection loop
+              if(Math.abs(conf) > 10){
+                conf = 1 / (1 + Math.exp(-conf));
+              } else if(conf < 0){
+                conf = 1 / (1 + Math.exp(-conf));
+              }
+              conf = Math.max(0, Math.min(1, conf));
+              
+              if(conf > maxConfFound){
+                maxConfFound = conf;
+                maxConfClass = c - 4;
+                maxConfBox = b;
+              }
+            }
+          }
+          
+          // Also check a few sample values
+          const sampleValues = [];
+          for(let i = 0; i < Math.min(10, processedData.length); i += 100){
+            sampleValues.push(processedData[i]?.toFixed(3) || 'N/A');
+          }
+          
+          // Get sample raw values for debugging
+          const sampleRaw = [];
+          for(let i = 0; i < Math.min(5, processedData.length); i += 1000){
+            sampleRaw.push(processedData[i]?.toFixed(2) || 'N/A');
+          }
+          
+          log(`🔍 [DEBUG] Max confidence: ${maxConfFound.toFixed(3)} (class ${maxConfClass}, box ${maxConfBox}), threshold: ${threshold}`);
+          log(`🔍 [DEBUG] Sample raw values: [${sampleRaw.join(', ')}]`);
+          log(`🔍 [DEBUG] Total boxes checked: ${totalChecked}, Valid boxes: ${validBoxes}, Detections: ${detections.length}`);
+          
+          // Debug: check first box with high confidence
+          if(maxConfBox >= 0 && maxConfBox < boxes){
+            const debugBaseIdx = maxConfBox * features;
+            const debugXc = processedData[debugBaseIdx];
+            const debugYc = processedData[debugBaseIdx + 1];
+            const debugW = processedData[debugBaseIdx + 2];
+            const debugH = processedData[debugBaseIdx + 3];
+            log(`🔍 [DEBUG] Box ${maxConfBox} coords: xc=${debugXc.toFixed(3)}, yc=${debugYc.toFixed(3)}, w=${debugW.toFixed(3)}, h=${debugH.toFixed(3)}`);
+          }
+          
+          if(maxConfFound > 0 && maxConfFound < threshold){
+            log(`⚠️ [DEBUG] Max confidence ${maxConfFound.toFixed(3)} below threshold ${threshold}`);
+          }
+          
+          if(detections.length === 0){
+            if(maxConfFound > 0.01){
+              log(`⚠️ [DEBUG] No detections. Max conf=${maxConfFound.toFixed(3)}, threshold=${threshold}`);
+              if(maxConfFound > threshold * 0.8 && maxConfFound < threshold){
+                log(`💡 Suggestion: Lowering threshold to ${Math.max(0.05, maxConfFound * 0.9).toFixed(2)} might help`);
+              } else if(maxConfFound < 0.05){
+                log(`⚠️ Max confidence very low (${maxConfFound.toFixed(3)}). Model might not be detecting properly.`);
+              } else if(maxConfFound >= threshold){
+                log(`⚠️ Max confidence ${maxConfFound.toFixed(3)} >= threshold ${threshold}, but no detections. Box validation might be too strict.`);
+              }
+            } else {
+              log(`❌ [DEBUG] No detections AND very low max confidence (${maxConfFound.toFixed(3)}). Possible issues:`);
+              log(`   1. Preprocessing incorrect (should be RGB normalized 0-1)`);
+              log(`   2. Model output format mismatch`);
+              log(`   3. No objects in frame`);
+            }
+          }
+          postprocessYOLO._debugLogged = true;
+        }
+        
+        // Improved NMS: more aggressive for person detection to prevent duplicates
+        // First, filter person detections - only keep the best one if multiple overlap
+        const personDetections = detections.filter(d => d.label === 'person');
+        const otherDetections = detections.filter(d => d.label !== 'person');
+        
+        // For person: if multiple persons detected, keep only the highest confidence one
+        // (assuming multiple person detections are duplicates of the same person)
+        let filteredPersons = [];
+        if(personDetections.length > 0){
+          // Sort by confidence (already sorted, but ensure)
+          const sortedPersons = personDetections.sort((a, b) => b.score - a.score);
+          
+          // If multiple persons, check if they overlap significantly
+          // If they do, keep only the highest confidence one
+          if(sortedPersons.length > 1){
+            const bestPerson = sortedPersons[0];
+            // Check if other persons significantly overlap with the best one
+            let hasOverlap = false;
+            for(let i = 1; i < sortedPersons.length; i++){
+              const iou = calculateIoU(bestPerson.bbox, sortedPersons[i].bbox);
+              if(iou > 0.3){ // Lower threshold for person (0.3 instead of 0.5)
+                hasOverlap = true;
+                break;
+              }
+            }
+            
+            if(hasOverlap){
+              // Multiple persons detected with overlap - keep only the best one
+              filteredPersons = [bestPerson];
+            } else {
+              // Genuinely different persons - keep all (but this is rare)
+              filteredPersons = sortedPersons;
+            }
+          } else {
+            filteredPersons = sortedPersons;
+          }
+        }
+        
+        // For other detections: apply normal NMS
+        const filtered = [...filteredPersons];
+        for(const det of otherDetections){
+          let overlap = false;
+          for(const existing of filtered){
+            const iou = calculateIoU(det.bbox, existing.bbox);
+            // Use lower IoU threshold for person (0.3) vs others (0.5)
+            const iouThreshold = (existing.label === 'person' || det.label === 'person') ? 0.3 : 0.5;
+            if(iou > iouThreshold && det.label === existing.label){
+              overlap = true;
+              break;
+            }
+          }
+          if(!overlap){
+            filtered.push(det);
+          }
+        }
+        
+        // Final sort by confidence and limit
+        filtered.sort((a, b) => b.score - a.score);
+        return filtered.slice(0, 20); // Keep top 20 detections
+      }
+
+      function calculateIoU(box1, box2){
+        const [x1, y1, w1, h1] = box1;
+        const [x2, y2, w2, h2] = box2;
+        
+        const x1Max = x1 + w1;
+        const y1Max = y1 + h1;
+        const x2Max = x2 + w2;
+        const y2Max = y2 + h2;
+        
+        const xMin = Math.max(x1, x2);
+        const yMin = Math.max(y1, y2);
+        const xMax = Math.min(x1Max, x2Max);
+        const yMax = Math.min(y1Max, y2Max);
+        
+        const intersection = Math.max(0, xMax - xMin) * Math.max(0, yMax - yMin);
+        const area1 = w1 * h1;
+        const area2 = w2 * h2;
+        const union = area1 + area2 - intersection;
+        
+        return union > 0 ? intersection / union : 0;
+      }
+
+      function drawBoundingBoxes(detections, verified){
+        if(!overlayCtx || !video || video.videoWidth === 0) return;
+        
+        const scaleX = overlayCanvas.width / video.videoWidth;
+        const scaleY = overlayCanvas.height / video.videoHeight;
+        
+        overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+        
+        detections.forEach(det => {
+          const [x, y, w, h] = det.bbox;
+          const sx = x * scaleX;
+          const sy = y * scaleY;
+          const sw = w * scaleX;
+          const sh = h * scaleY;
+          
+          // Check if this is the person being verified
+          const isVerifiedPerson = verified && verified.match && det.label === 'person';
+          
+          // Draw box with different color for verified person
+          overlayCtx.strokeStyle = isVerifiedPerson ? '#22c55e' : '#3b82f6';
+          overlayCtx.lineWidth = isVerifiedPerson ? 4 : 3;
+          overlayCtx.strokeRect(sx, sy, sw, sh);
+          
+          // Draw label background
+          let labelText;
+          if(isVerifiedPerson){
+            labelText = `✅ Alex - MATCH (${(verified.score*100).toFixed(0)}%)`;
+                } else {
+            labelText = `${det.label} ${(det.score*100).toFixed(0)}%`;
+          }
+          
+          overlayCtx.fillStyle = isVerifiedPerson ? '#22c55e' : '#3b82f6';
+          overlayCtx.font = 'bold 14px Arial';
+          const textWidth = overlayCtx.measureText(labelText).width;
+          overlayCtx.fillRect(sx, sy - 22, textWidth + 10, 22);
+          
+          // Draw label text
+          overlayCtx.fillStyle = '#fff';
+          overlayCtx.fillText(labelText, sx + 5, sy - 7);
+        });
+      }
+
+      function area(bbox){ return Math.max(0, bbox[2]) * Math.max(0, bbox[3]); }
+
+      function updateAudioBars(level){
+        const bars = audioBars.children;
+        const activeCount = Math.floor(level * bars.length);
+        for(let i=0; i<bars.length; i++){
+          bars[i].style.width = i < activeCount ? '100%' : '0%';
+          if(i < activeCount && level > 0.5) bars[i].style.background = '#f59e0b';
+          else if(i < activeCount) bars[i].style.background = '#0ea5e9';
+        }
+      }
+
+      async function startAudioMonitoring(){
+        try{
+          log('Requesting audio access...');
+          audioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          const source = audioContext.createMediaStreamSource(audioStream);
+          analyser = audioContext.createAnalyser();
+          analyser.fftSize = 2048;
+          analyser.smoothingTimeConstant = 0.3;
+          source.connect(analyser);
+          
+          const freqData = new Uint8Array(analyser.frequencyBinCount);
+          const minSpeechHz = 300;
+          const maxSpeechHz = 3000;
+          
+          audioInterval = setInterval(() => {
+            if(!analyser) return;
+            analyser.getByteFrequencyData(freqData);
+            
+            const nyquist = audioContext.sampleRate / 2;
+            const binSize = nyquist / freqData.length;
+            
+            let speechBandEnergy = 0;
+            let totalEnergy = 0;
+            
+            for(let i=0; i<freqData.length; i++){
+              const freq = i * binSize;
+              const v = freqData[i];
+              totalEnergy += v;
+              if(freq >= minSpeechHz && freq <= maxSpeechHz){
+                speechBandEnergy += v;
+              }
+            }
+            
+            const level = totalEnergy / freqData.length / 255;
+            const bandRatio = totalEnergy > 0 ? speechBandEnergy / totalEnergy : 0;
+            
+            // Whisper: speech band prominent but overall level is low (0.02-0.12 range)
+            const isWhisper = bandRatio > 0.45 && level > 0.02 && level < 0.12;
+            
+            updateAudioBars(level);
+            
+            if(isWhisper){
+              const whisperLevel = ((level - 0.02) / 0.10) * 100;
+              whisperBar.style.width = Math.min(100, Math.max(0, whisperLevel)) + '%';
+              whisperBar.style.background = '#f59e0b';
+              
+              if(whisperLevel > 30 && Math.random() > 0.95){
+                addAlert('Whisper detected (' + (level * 100).toFixed(1) + '%)');
+                log('Whisper detected: level=' + level.toFixed(3) + ', bandRatio=' + bandRatio.toFixed(2));
+              }
+            } else {
+              whisperBar.style.width = '0%';
+            }
+            
+            audioStatus.textContent = 'Audio: Active | Level: ' + (level * 100).toFixed(1) + '%';
+          }, 100);
+          
+          log('✅ Audio monitoring started');
+          whisperStatus.classList.add('active');
+        }catch(e){
+          log('❌ Audio error: ' + (e && e.message ? e.message : e));
+          audioStatus.textContent = 'Audio: Failed - ' + (e && e.message ? e.message : 'Unknown error');
+          whisperStatus.classList.remove('active');
+        }
+      }
+
+      function stopAudioMonitoring(){
+        if(audioInterval) clearInterval(audioInterval);
+        if(audioStream) audioStream.getTracks().forEach(t => t.stop());
+        if(audioContext) audioContext.close();
+        audioContext = null;
+        audioStream = null;
+        analyser = null;
+        audioInterval = null;
+        updateAudioBars(0);
+        whisperBar.style.width = '0%';
+        audioStatus.textContent = 'Audio: Not active';
+        whisperStatus.classList.remove('active');
+        log('Audio monitoring stopped');
+      }
+
+      function log(msg){
+        const ts = new Date().toLocaleTimeString();
+        logs.innerHTML = `[${ts}] ${msg}<br>` + logs.innerHTML;
+        const lines = logs.innerHTML.split('<br>');
+        if (lines.length > 200) logs.innerHTML = lines.slice(0,200).join('<br>');
+      }
+
+      function addAlert(msg){ const d=document.createElement('div'); d.className='alert'; d.textContent=msg; alerts.prepend(d); while(alerts.children.length>5) alerts.removeChild(alerts.lastChild); }
+      const startBtn=document.getElementById('startBtn'); const stopBtn=document.getElementById('stopBtn');
+
+      async function requestCameraPermission(){
+        try{
+          log('Checking camera permission...');
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const hasPermission = devices.some(d => d.kind === 'videoinput' && d.label !== '');
+          
+          if(hasPermission){
+            log('Camera permission already granted');
+            return true;
+          }
+
+          log('Requesting camera permission from user...');
+          // Request permission without zoom
+          const permStream = await navigator.mediaDevices.getUserMedia({ 
+            video: { 
+              facingMode: 'user',
+              width: { ideal: 1280 },
+              height: { ideal: 720 }
+            } 
+          });
+          permStream.getTracks().forEach(t => t.stop());
+          log('Camera permission granted');
+          return true;
+        }catch(e){
+          if(e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError'){
+            log('Camera permission denied by user');
+            addAlert('Camera permission denied. Please allow camera access to continue.');
+                } else {
+            log('Permission check error: ' + (e && e.message ? e.message : e));
+          }
+          return false;
+        }
+      }
+
+      async function startCamera(){
+        try{
+          log('Starting camera stream...');
+          // Request camera without zoom - use default constraints to avoid auto-zoom
+          stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { 
+              facingMode: 'user',
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+              // No zoom constraints - let browser use default
+            }, 
+            audio: false 
+          });
+          video.srcObject = stream;
+          await video.play();
+          
+          detectionCanvas = document.createElement('canvas');
+          detectionCtx = detectionCanvas.getContext('2d');
+          
+          // Function to start detection if both ready
+          const tryStartDetection = () => {
+            // Reset flags when both video and model are ready (prevents stale flags from hiding issues)
+            const videoReady = video && video.videoWidth > 0;
+            const modelReady = (currentModelType === 'yolo' && ortSession) || (currentModelType === 'cocossd' && cocoSsdModel);
+            
+            if(videoReady && modelReady){
+              // Reset all logging flags when both are ready - allows fresh logging if needed
+              tryStartDetection._entryLogged = false;
+              tryStartDetection._noVideoLogged = false;
+              tryStartDetection._noModelLogged = false;
+              tryStartDetection._alreadyRunningLogged = false;
+            }
+            
+            // Log entry (only when conditions are met)
+            if(!tryStartDetection._entryLogged && videoReady && modelReady){
+              log(`🔍 tryStartDetection() called - video=${videoReady}, model=${modelReady}`);
+              tryStartDetection._entryLogged = true;
+            }
+            
+            if(!video || video.videoWidth === 0){
+              if(!tryStartDetection._noVideoLogged){
+                log(`⚠️ tryStartDetection: Video not ready - video=${!!video}, width=${video ? video.videoWidth : 0}`);
+                tryStartDetection._noVideoLogged = true;
+              }
+              return false;
+            }
+            
+            // Check model availability based on current model type
+            if(!modelReady){
+              if(!tryStartDetection._noModelLogged){
+                const modelName = currentModelType === 'yolo' ? 'YOLOv8n' : 'COCO SSD';
+                log(`⏳ tryStartDetection: Waiting for ${modelName} model to load...`);
+                log(`   currentModelType=${currentModelType}, ortSession=${!!ortSession}, cocoSsdModel=${!!cocoSsdModel}`);
+                tryStartDetection._noModelLogged = true;
+              }
+              return false;
+            }
+            
+            // Both ready - start detection
+            if(detectionInterval){
+              // Already running
+              if(!tryStartDetection._alreadyRunningLogged){
+                log(`✅ Detection loop already running`);
+                tryStartDetection._alreadyRunningLogged = true;
+              }
+              return true;
+            }
+            
+            // Optimized detection interval for smoother FPS (100ms = ~10 FPS max, actual depends on inference speed)
+            const detectionIntervalMs = 100; // Optimized for smooth FPS - will skip if inference not done
+            log(`🔄 Starting detection loop (every ${detectionIntervalMs}ms for max ~${Math.round(1000/detectionIntervalMs)} FPS)...`);
+            log(`📹 Video: ${video.videoWidth}x${video.videoHeight}, Model: ${currentModelType === 'yolo' ? 'YOLOv8n' : 'COCO SSD'}`);
+            
+            // Reset debug flags when starting detection
+            if(runDetection) runDetection._lastLog = null;
+            if(runDetection) runDetection._lastDetLog = null;
+            if(runDetection) runDetection._inferenceLogged = false;
+            if(runDetection) runDetection._inferenceCount = 0;
+            if(runDetection) runDetection._skipLogged = false;
+            if(runDetection) runDetection._noModelLogged = false;
+            if(postprocessYOLO) postprocessYOLO._debugLogged = false;
+            
+            // Log first detection attempt
+            log('🔄 First detection attempt in 100ms...');
+            setTimeout(() => {
+              const modelReady = (currentModelType === 'yolo' && ortSession) || (currentModelType === 'cocossd' && cocoSsdModel);
+              if(video && video.videoWidth > 0 && modelReady){
+                log('🔍 Running first detection...');
+                runDetection().catch(e => {
+                  log('❌ First detection error: ' + (e.message || e));
+                  console.error('First detection error:', e);
+                });
+              } else {
+                log(`⚠️ First detection skipped: video=${!!video && video.videoWidth > 0}, model=${modelReady}`);
+              }
+            }, 100);
+            
+            detectionInterval = setInterval(() => {
+              const modelReady = (currentModelType === 'yolo' && ortSession) || (currentModelType === 'cocossd' && cocoSsdModel);
+              if(video && video.videoWidth > 0 && modelReady){
+                runDetection().catch(e => {
+                  log('❌ Detection loop error: ' + (e.message || e));
+                  console.error('Detection loop error:', e);
+                });
+              }
+            }, detectionIntervalMs); // Optimized: 100ms for smoother FPS (~10 FPS)
+            
+            return true;
+          };
+          
+          video.addEventListener('loadedmetadata', () => {
+            log('Camera started. Resolution: ' + video.videoWidth + 'x' + video.videoHeight);
+            detectionCanvas.width = video.videoWidth;
+            detectionCanvas.height = video.videoHeight;
+            
+            // Log current state
+            const modelReady = (currentModelType === 'yolo' && ortSession) || (currentModelType === 'cocossd' && cocoSsdModel);
+            log(`📊 Detection check: video=${!!video && video.videoWidth > 0}, modelType=${currentModelType}, modelReady=${modelReady}`);
+            
+            // Try to start detection immediately
+            if(!tryStartDetection()){
+              // If not ready, check periodically
+              log('⏳ Waiting for model to load...');
+              const checkInterval = setInterval(() => {
+                const modelReady = (currentModelType === 'yolo' && ortSession) || (currentModelType === 'cocossd' && cocoSsdModel);
+                log(`🔄 Checking... video=${!!video && video.videoWidth > 0}, modelReady=${modelReady}`);
+                if(tryStartDetection()){
+                  clearInterval(checkInterval);
+                  log('✅ Detection loop started via periodic check');
+                }
+              }, 500); // Check every 500ms
+              
+              // Stop checking after 10 seconds
+              setTimeout(() => {
+                clearInterval(checkInterval);
+                if(!detectionInterval){
+                  log('⚠️ Detection loop not started after 10s. Check model and camera.');
+                  const modelReady = (currentModelType === 'yolo' && ortSession) || (currentModelType === 'cocossd' && cocoSsdModel);
+                  log(`   Final state: video=${!!video && video.videoWidth > 0}, modelType=${currentModelType}, modelReady=${modelReady}`);
+                }
+              }, 10000);
+            } else {
+              log('✅ Detection loop started immediately');
+            }
+          });
+          
+          // Also listen for model ready event - this handles case when model loads after camera starts
+          window.addEventListener('modelready', () => {
+            log(`📥 modelready event received - video=${!!video && video.videoWidth > 0}, model=${(currentModelType === 'yolo' && ortSession) || (currentModelType === 'cocossd' && cocoSsdModel)}`);
+            if(video && video.videoWidth > 0){
+              const started = tryStartDetection();
+              if(started){
+                log('✅ Detection loop started via modelready event');
+              } else {
+                log('⚠️ Detection loop not started from modelready event (conditions not met yet)');
+              }
+            } else {
+              log('⚠️ modelready event received but camera not ready yet');
+            }
+          });
+          
+          video.style.display = 'block';
+          videoPh.style.display = 'none';
+          log('Camera stream active');
+          
+          // Model should already be loaded via selectModel() or startBtn click or auto-load
+          // Verify model is loaded and try to start detection if ready
+          const modelReady = (currentModelType === 'yolo' && ortSession) || (currentModelType === 'cocossd' && cocoSsdModel);
+          if(!modelReady){
+            log('⚠️ Model belum dimuat. Silakan pilih model terlebih dahulu.');
+            addAlert('⚠️ Silakan pilih model (YOLOv8n atau COCO SSD) sebelum start');
+          } else {
+            // Model is ready - detection loop will start via loadedmetadata event or modelready event
+            // But also try to start here as backup (in case events already fired)
+            log(`✅ Model ${currentModelType === 'yolo' ? 'YOLOv8n' : 'COCO SSD'} is ready`);
+            // Detection will start via loadedmetadata event listener, but check once more after a short delay
+            setTimeout(() => {
+              if(video && video.videoWidth > 0 && !detectionInterval){
+                log('🔄 Attempting to start detection loop (backup check)...');
+                tryStartDetection();
+              }
+            }, 200);
+          }
+        }catch(e){
+          log('Camera error: ' + (e && e.message ? e.message : e));
+          addAlert('Camera access failed: ' + (e && e.message ? e.message : 'Unknown error'));
+          startBtn.disabled = false;
+          stopBtn.disabled = true;
+        }
+      }
+
+      function stopCamera(){
+        if(detectionInterval) clearInterval(detectionInterval);
+        detectionInterval = null;
+        
+        if(overlayCtx) {
+          overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+        }
+        overlayCanvas.style.display = 'none';
+        
+        if(stream){ 
+          stream.getTracks().forEach(t=>t.stop()); 
+          stream=null; 
+        }
+        
+        // Don't unload models on stop - user might want to switch models or restart quickly
+        // Models stay loaded until page reload or model switch
+        
+        video.srcObject = null; 
+        video.style.display='none'; 
+        videoPh.style.display='flex';
+        detectionCanvas = null;
+        detectionCtx = null;
+        detectionInProgress = false;
+        
+        log('Camera stopped.');
+      }
+
+      async function enrollFromPublicPath(path){
+        try{
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          const loaded = await new Promise((resolve, reject) => {
+            img.onload = () => resolve(img);
+            img.onerror = reject;
+            img.src = path;
+          });
+          const size = 256;
+          const canvas = document.createElement('canvas');
+          canvas.width = canvas.height = size;
+          const ctx = canvas.getContext('2d');
+          const minSide = Math.min(loaded.naturalWidth, loaded.naturalHeight);
+          const sx = (loaded.naturalWidth - minSide) / 2;
+          const sy = (loaded.naturalHeight - minSide) / 2;
+          ctx.drawImage(loaded, sx, sy, minSide, minSide, 0, 0, size, size);
+          const pHash = await computePHash(canvas);
+          const histogram = computeRgbHistogram(canvas);
+          const lbph = computeLBPH(canvas);
+          const imageDataUrl = canvas.toDataURL('image/png');
+          const data = { imageDataUrl, pHash, histogram, lbph, displayName: 'Alex' };
+          localStorage.setItem('proctor:enrollment', JSON.stringify(data));
+          log(`✅ Enrollment saved with LBPH+pHash (optimized one-shot learning)`);
+          log(`   Features: LBPH(${lbph.length}), pHash(${pHash.length})`);
+          return data;
+        }catch(e){
+          throw new Error('Failed to load image: ' + (e.message || e));
+        }
+      }
+
+      // Model selection button handlers
+      document.getElementById('selectYoloBtn').onclick = async () => {
+        await selectModel('yolo');
+      };
+      
+      document.getElementById('selectCocoBtn').onclick = async () => {
+        await selectModel('cocossd');
+      };
+      
+      // Initialize model selection UI
+      (function initModelSelection(){
+        const yoloBtn = document.getElementById('selectYoloBtn');
+        const cocoBtn = document.getElementById('selectCocoBtn');
+        const currentModelEl = document.getElementById('currentModel');
+        const modelStatusTextEl = document.getElementById('modelStatusText');
+        
+        if(yoloBtn && cocoBtn){
+          // Set initial state (YOLOv8n selected by default)
+          yoloBtn.style.background = '#22c55e';
+          yoloBtn.style.color = '#fff';
+          cocoBtn.style.background = '#3b82f6';
+          cocoBtn.style.color = '#fff';
+        }
+        
+        // Update UI text to show YOLOv8n as default
+        if(currentModelEl){
+          currentModelEl.textContent = 'YOLOv8n';
+        }
+        if(modelStatusTextEl){
+          modelStatusTextEl.textContent = 'YOLOv8n Detection';
+        }
+        
+        // Auto-load YOLOv8n model on page load
+        setTimeout(async () => {
+          try{
+            await loadYOLOv8Model();
+            log('✅ YOLOv8n model auto-loaded (default model)');
+          }catch(e){
+            log('⚠️ Failed to auto-load YOLOv8n: ' + (e.message || e));
+          }
+        }, 500);
+      })();
+      
+      startBtn.onclick=async ()=>{
+        log('Start Proctoring clicked');
+        startBtn.disabled = true;
+        
+        // Ensure model is loaded before starting
+        if(currentModelType === 'yolo' && !ortSession){
+          log('⏳ Loading YOLOv8n model...');
+          try{
+            await loadYOLOv8Model();
+          }catch(e){
+            log('❌ Failed to load YOLOv8n model');
+            startBtn.disabled = false;
+            return;
+          }
+        } else if(currentModelType === 'cocossd' && !cocoSsdModel){
+          log('⏳ Loading COCO SSD model...');
+          try{
+            await loadCocoSsdModel();
+          }catch(e){
+            log('❌ Failed to load COCO SSD model');
+            startBtn.disabled = false;
+            return;
+          }
+        }
+        
+        const hasPermission = await requestCameraPermission();
+        if(hasPermission){
+          addAlert('Proctoring started');
+          stopBtn.disabled = false;
+          await startCamera();
+          await startAudioMonitoring();
+                } else {
+          startBtn.disabled = false;
+        }
+      };
+      stopBtn.onclick=()=>{ 
+        addAlert('Proctoring stopped'); 
+        startBtn.disabled=false; 
+        stopBtn.disabled=true; 
+        stopCamera(); 
+        stopAudioMonitoring();
+      };
+      document.getElementById('loadEnrollBtn').onclick=async ()=>{
+        try{
+          log('🔄 Loading enrollment from /enrollment/Foto_Alex.jpg...');
+          await enrollFromPublicPath('/enrollment/Foto_Alex.jpg');
+          addAlert('Enrollment loaded: Alex');
+          log('✅ Enrollment saved to localStorage');
+          identityResult.textContent = '✅ Enrollment ready (Alex)';
+          identityResult.style.color = '#16a34a';
+          identityStatus.classList.add('active');
+        }catch(e){
+          log('❌ Enrollment failed: ' + (e.message || e));
+          addAlert('Failed to load enrollment. Make sure Foto_Alex.jpg is in public/enrollment/');
+          identityStatus.classList.remove('active');
+        }
+      };
+
+      // Check enrollment on page load
+      window.addEventListener('load', () => {
+        const enrolled = loadEnrollment();
+        if(enrolled){
+          identityResult.textContent = `✅ Enrollment ready (${enrolled.displayName || 'Unknown'})`;
+          identityResult.style.color = '#16a34a';
+          identityStatus.classList.add('active');
+          log('Found existing enrollment: ' + (enrolled.displayName || 'Unknown'));
+        } else {
+          identityResult.textContent = '⚠️ No enrollment. Click "Load Default Enrollment"';
+          identityResult.style.color = '#f59e0b';
+          identityStatus.classList.remove('active');
+            }
+        });
+      
+      // CPU Usage tracking using Performance API
+      function trackCPUUsage(inferenceTime){
+        const now = performance.now();
+        
+        // Estimate CPU usage based on inference time vs detection interval
+        // If inference takes longer than detection interval, CPU is busy
+        const detectionInterval = 100; // ms
+        const cpuLoad = Math.min(100, (inferenceTime / detectionInterval) * 100);
+        
+        cpuUsageTracker.samples.push(cpuLoad);
+        if(cpuUsageTracker.samples.length > 30) cpuUsageTracker.samples.shift();
+      }
+      
+      function updateCPUUsage(now){
+        if(cpuUsageTracker.samples.length > 0){
+          // Calculate average CPU usage - optimized calculation
+          let sum = 0;
+          for(let i = 0; i < cpuUsageTracker.samples.length; i++){
+            sum += cpuUsageTracker.samples[i];
+          }
+          const avgCpu = sum / cpuUsageTracker.samples.length;
+          cpuUsageTracker.usage = avgCpu;
+          
+          const cpuEl = document.getElementById('cpu');
+          if(cpuEl){
+            cpuEl.textContent = avgCpu.toFixed(1) + '%';
+            // Update CPU chart
+            updateChart('cpuChart', avgCpu, cpuChartData, 100, '#f59e0b');
+          }
+        }
+      }
+      
+      // Initialize CPU tracking
+      updateCPUUsage(performance.now());
+      
+      // ==================== PERFORMANCE TESTING MODE ====================
+      
+      // Function to record current metrics
+      function recordTestData(modelName) {
+        if(!isTestingMode) return;
+        
+        const elapsed = Math.floor((Date.now() - testStartTime) / 1000);
+        const inferenceTime = inferenceTimes.length > 0 ? inferenceTimes[inferenceTimes.length - 1] : 0;
+        const avgInferenceTime = inferenceTimes.length > 0 ? 
+          inferenceTimes.reduce((a, b) => a + b, 0) / inferenceTimes.length : 0;
+        const fps = fpsCounter.fps || 0;
+        const cpuUsage = cpuUsageTracker.usage || 0;
+        
+        const dataPoint = {
+          timestamp: new Date().toISOString(),
+          elapsedSeconds: elapsed,
+          inferenceTime: inferenceTime,
+          avgInferenceTime: avgInferenceTime,
+          fps: fps,
+          cpuUsage: cpuUsage
+        };
+        
+        if(modelName === 'yolo') {
+          testingData.yolo.push(dataPoint);
+        } else if(modelName === 'coco') {
+          testingData.coco.push(dataPoint);
+        }
+        
+        // Update UI
+        const dataPointsEl = document.getElementById('testDataPoints');
+        if(dataPointsEl) {
+          const totalPoints = testingData.yolo.length + testingData.coco.length;
+          dataPointsEl.textContent = totalPoints;
+        }
+      }
+      
+      // Function to switch model during testing
+      async function switchTestModel(modelName) {
+        if(!isTestingMode) return;
+        
+        log(`🔄 Testing: Switching to ${modelName === 'yolo' ? 'YOLOv8n' : 'COCO SSD'}...`);
+        
+        // Stop detection temporarily
+        if(detectionInterval) {
+          clearInterval(detectionInterval);
+          detectionInterval = null;
+        }
+        
+        // Switch model
+        await selectModel(modelName === 'yolo' ? 'yolo' : 'cocossd');
+        
+        // Update UI
+        const modelTextEl = document.getElementById('testModelText');
+        if(modelTextEl) {
+          modelTextEl.textContent = modelName === 'yolo' ? 'YOLOv8n' : 'COCO SSD';
+        }
+        
+        testCurrentModel = modelName;
+        testModelStartTime = Date.now();
+        
+        // Wait a bit for model to load and resume detection
+        setTimeout(() => {
+          if(video && video.videoWidth > 0 && isTestingMode) {
+            // Detection will resume automatically via existing mechanisms
+            log(`✅ Testing: ${modelName === 'yolo' ? 'YOLOv8n' : 'COCO SSD'} ready, detection resumed`);
+          }
+        }, 500);
+      }
+      
+      // Function to generate CSV from data
+      function generateCSV(data, modelName) {
+        const headers = ['timestamp', 'elapsed_seconds', 'inference_time_ms', 'avg_inference_time_ms', 'fps', 'cpu_usage_percent'];
+        const rows = [headers.join(',')];
+        
+        for(const point of data) {
+          const row = [
+            point.timestamp,
+            point.elapsedSeconds,
+            point.inferenceTime.toFixed(2),
+            point.avgInferenceTime.toFixed(2),
+            point.fps,
+            point.cpuUsage.toFixed(2)
+          ];
+          rows.push(row.join(','));
+        }
+        
+        return rows.join('\n');
+      }
+      
+      // Function to download CSV
+      function downloadCSV(csvContent, filename) {
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        
+        link.setAttribute('href', url);
+        link.setAttribute('download', filename);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+      
+      // Start testing mode
+      async function startTesting() {
+        if(isTestingMode) return;
+        
+        log('🧪 Starting Performance Testing Mode...');
+        addAlert('🧪 Performance Testing Mode Started - YOLO (1 min) → COCO SSD (1 min)');
+        
+        // Reset data
+        testingData.yolo = [];
+        testingData.coco = [];
+        isTestingMode = true;
+        testStartTime = Date.now();
+        testCurrentModel = 'yolo';
+        testModelStartTime = Date.now();
+        
+        // Update UI
+        const startTestBtn = document.getElementById('startTestBtn');
+        const stopTestBtn = document.getElementById('stopTestBtn');
+        const statusTextEl = document.getElementById('testStatusText');
+        const modelTextEl = document.getElementById('testModelText');
+        const elapsedTextEl = document.getElementById('testElapsedText');
+        const dataPointsEl = document.getElementById('testDataPoints');
+        
+        if(startTestBtn) startTestBtn.disabled = true;
+        if(stopTestBtn) stopTestBtn.disabled = false;
+        if(statusTextEl) statusTextEl.textContent = 'Testing...';
+        if(modelTextEl) modelTextEl.textContent = 'YOLOv8n';
+        if(dataPointsEl) dataPointsEl.textContent = '0';
+        
+        // Ensure camera is running
+        if(!video || video.videoWidth === 0) {
+          log('⚠️ Testing: Camera not running. Starting camera...');
+          await requestCameraPermission();
+          await startCamera();
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for camera to initialize
+        }
+        
+        // Ensure YOLO model is loaded
+        if(!ortSession && currentModelType !== 'yolo') {
+          await selectModel('yolo');
+        } else if(currentModelType !== 'yolo') {
+          await selectModel('yolo');
+        }
+        
+        // Start recording data every 1 second
+        testRecordingInterval = setInterval(() => {
+          if(isTestingMode) {
+            recordTestData(testCurrentModel);
+            
+            // Update elapsed time
+            if(elapsedTextEl) {
+              const elapsed = Math.floor((Date.now() - testStartTime) / 1000);
+              const minutes = Math.floor(elapsed / 60);
+              const seconds = elapsed % 60;
+              elapsedTextEl.textContent = `${minutes}m ${seconds}s`;
+            }
+          }
+        }, 1000);
+        
+        // Switch to COCO after 1 minute (60 seconds)
+        testModelSwitchTimeout = setTimeout(async () => {
+          if(isTestingMode && testCurrentModel === 'yolo') {
+            log('⏰ Testing: 1 minute elapsed, switching to COCO SSD...');
+            await switchTestModel('coco');
+            
+            // Stop testing after another minute
+            testModelSwitchTimeout = setTimeout(() => {
+              if(isTestingMode) {
+                stopTesting();
+              }
+            }, 60000); // Another 60 seconds
+          }
+        }, 60000); // 60 seconds = 1 minute
+        
+        log('✅ Testing Mode started - Recording data every 1 second');
+      }
+      
+      // Stop testing mode
+      function stopTesting() {
+        if(!isTestingMode) return;
+        
+        log('🧪 Stopping Performance Testing Mode...');
+        isTestingMode = false;
+        
+        // Clear intervals and timeouts
+        if(testRecordingInterval) {
+          clearInterval(testRecordingInterval);
+          testRecordingInterval = null;
+        }
+        if(testModelSwitchTimeout) {
+          clearTimeout(testModelSwitchTimeout);
+          testModelSwitchTimeout = null;
+        }
+        
+        // Update UI
+        const startTestBtn = document.getElementById('startTestBtn');
+        const stopTestBtn = document.getElementById('stopTestBtn');
+        const statusTextEl = document.getElementById('testStatusText');
+        
+        if(startTestBtn) startTestBtn.disabled = false;
+        if(stopTestBtn) stopTestBtn.disabled = true;
+        if(statusTextEl) statusTextEl.textContent = 'Completed';
+        
+        // Generate and download CSV files
+        log('📊 Generating CSV files...');
+        
+        if(testingData.yolo.length > 0) {
+          const yoloCSV = generateCSV(testingData.yolo, 'yolo');
+          downloadCSV(yoloCSV, `yolo_performance_${Date.now()}.csv`);
+          log(`✅ YOLO CSV generated: ${testingData.yolo.length} data points`);
+          addAlert(`✅ YOLO CSV downloaded (${testingData.yolo.length} data points)`);
+        }
+        
+        if(testingData.coco.length > 0) {
+          const cocoCSV = generateCSV(testingData.coco, 'coco');
+          downloadCSV(cocoCSV, `coco_performance_${Date.now()}.csv`);
+          log(`✅ COCO SSD CSV generated: ${testingData.coco.length} data points`);
+          addAlert(`✅ COCO SSD CSV downloaded (${testingData.coco.length} data points)`);
+        }
+        
+        log('✅ Testing Mode completed - CSV files downloaded');
+        addAlert('✅ Performance Testing completed - CSV files downloaded');
+      }
+      
+      // Event handlers for testing buttons
+      document.getElementById('startTestBtn').onclick = async () => {
+        await startTesting();
+      };
+      
+      document.getElementById('stopTestBtn').onclick = () => {
+        stopTesting();
+      };
+      
+      // Chart drawing function
+      function drawChart(canvasId, data, maxValue, color, label) {
+        const canvas = document.getElementById(canvasId);
+        if(!canvas) return;
+        
+        const ctx = canvas.getContext('2d');
+        const rect = canvas.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        
+        // Set canvas size accounting for device pixel ratio
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        ctx.scale(dpr, dpr);
+        
+        // Use actual display size
+        const width = rect.width;
+        const height = rect.height;
+        
+        const padding = 4;
+        const chartWidth = width - (padding * 2);
+        const chartHeight = height - (padding * 2);
+        
+        // Clear canvas
+        ctx.clearRect(0, 0, width, height);
+        
+        if(data.length === 0) return;
+        
+        // Find min and max for scaling
+        const values = data.map(d => d.value);
+        const min = Math.min(...values, 0);
+        const max = Math.max(...values, maxValue || Math.max(...values) * 1.1);
+        const range = max - min || 1;
+        
+        // Draw grid lines
+        ctx.strokeStyle = '#e2e8f0';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(padding, height - padding);
+        ctx.lineTo(width - padding, height - padding);
+        ctx.stroke();
+        
+        // Draw line chart
+        if(data.length > 0) {
+          ctx.strokeStyle = color || '#3b82f6';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          
+          for(let i = 0; i < data.length; i++) {
+            const x = padding + (data.length > 1 ? (i / (data.length - 1)) : 0) * chartWidth;
+            const normalizedValue = (data[i].value - min) / range;
+            const y = height - padding - (normalizedValue * chartHeight);
+            
+            if(i === 0) {
+              ctx.moveTo(x, y);
+            } else {
+              ctx.lineTo(x, y);
+            }
+          }
+          
+          ctx.stroke();
+          
+          // Fill area under line
+          ctx.lineTo(width - padding, height - padding);
+          ctx.lineTo(padding, height - padding);
+          ctx.closePath();
+          ctx.fillStyle = color ? color + '20' : '#3b82f620';
+          ctx.fill();
+        }
+      }
+      
+      // Update chart data and redraw
+      function updateChart(chartId, value, dataArray, maxValue, color) {
+        if(!value || isNaN(value)) return;
+        
+        // Add new data point
+        dataArray.push({ value: value, time: Date.now() });
+        
+        // Keep only last maxChartPoints
+        if(dataArray.length > maxChartPoints) {
+          dataArray.shift();
+        }
+        
+        // Draw chart with slight delay to ensure canvas is ready
+        requestAnimationFrame(() => {
+          drawChart(chartId, dataArray, maxValue, color);
+        });
+      }
+    </script>
+</body>
+</html>
