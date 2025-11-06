@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+// import { Link } from 'react-router-dom'
 import { useEffect, useRef, useState } from 'react'
 import { initializeCamera, getVideoElement, cleanupCamera } from '@utils/cameraUtils'
 import { initializeAnalysisEngine, startAnalysis, stopAnalysis, onAnalysis } from '@ml/analysisEngine'
@@ -214,8 +214,8 @@ const ProctoringPage = () => {
     if (detections.length === 0) return
     
     // Get video display size (video element might have object-fit)
-    const videoDisplayWidth = video.offsetWidth || containerWidth
-    const videoDisplayHeight = video.offsetHeight || containerHeight
+    // const videoDisplayWidth = video.offsetWidth || containerWidth
+    // const videoDisplayHeight = video.offsetHeight || containerHeight
     
     // Calculate how video is displayed in container (considering object-fit)
     const videoAspect = video.videoWidth / video.videoHeight
