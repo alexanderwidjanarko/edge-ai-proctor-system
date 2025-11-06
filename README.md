@@ -1,7 +1,5 @@
 # Edge Proctor System
-
 Edge-Optimized Online Exam Proctoring System with AI/ML
-
 ## Overview
 
 Edge Proctor System is an advanced online exam proctoring solution designed specifically for edge devices with limited resources. It leverages cutting-edge computer vision and machine learning technologies to monitor exam sessions in real-time while maintaining high performance and low latency.
