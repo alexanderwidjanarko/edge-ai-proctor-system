@@ -203,7 +203,7 @@ After exam completion, view detailed reports including:
 
 ### Enrollment
 
-- Put enrollment photo at `public/enrollment/Foto_Nathan.jpg` to auto-load
+- Put enrollment photo at `public/enrollment/Foto_Alex.jpg` to auto-load
 - Or upload manually on Settings → Security
 - Enrollment is saved locally under key `proctor:enrollment`:
   - Cropped face PNG

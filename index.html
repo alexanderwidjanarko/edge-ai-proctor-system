@@ -1376,7 +1376,7 @@
             // Draw label
             let labelText;
             if(isVerified){
-              labelText = `✅ ${verified.name || 'Nathan'} - MATCH (${(verified.score*100).toFixed(0)}%)`;
+              labelText = `✅ ${verified.name || 'Alex'} - MATCH (${(verified.score*100).toFixed(0)}%)`;
             } else if(det.isImportant){
               labelText = `⚠️ ${det.label} ${(det.score*100).toFixed(0)}%`;
             } else {
@@ -1430,7 +1430,7 @@
           // Optimized string building
           const statusParts = [];
           if(verified && verified.match){
-            statusParts.push(`✅ ${verified.name || 'Nathan'} - MATCH`);
+            statusParts.push(`✅ ${verified.name || 'Alex'} - MATCH`);
           }
           if(personCount > 0) statusParts.push(`Persons: ${personCount}`);
           if(anomalyCount > 0) statusParts.push(`⚠️ Anomalies: ${anomalyCount}`);
@@ -2006,7 +2006,7 @@
           // Draw label background
           let labelText;
           if(isVerifiedPerson){
-            labelText = `✅ Nathan - MATCH (${(verified.score*100).toFixed(0)}%)`;
+            labelText = `✅ Alex - MATCH (${(verified.score*100).toFixed(0)}%)`;
                 } else {
             labelText = `${det.label} ${(det.score*100).toFixed(0)}%`;
           }
@@ -2399,7 +2399,7 @@
           const histogram = computeRgbHistogram(canvas);
           const lbph = computeLBPH(canvas);
           const imageDataUrl = canvas.toDataURL('image/png');
-          const data = { imageDataUrl, pHash, histogram, lbph, displayName: 'Nathan' };
+          const data = { imageDataUrl, pHash, histogram, lbph, displayName: 'Alex' };
           localStorage.setItem('proctor:enrollment', JSON.stringify(data));
           log(`✅ Enrollment saved with LBPH+pHash (optimized one-shot learning)`);
           log(`   Features: LBPH(${lbph.length}), pHash(${pHash.length})`);
@@ -2496,16 +2496,16 @@
       };
       document.getElementById('loadEnrollBtn').onclick=async ()=>{
         try{
-          log('🔄 Loading enrollment from /enrollment/Foto_Nathan.jpg...');
-          await enrollFromPublicPath('/enrollment/Foto_Nathan.jpg');
-          addAlert('Enrollment loaded: Nathan');
+          log('🔄 Loading enrollment from /enrollment/Foto_Alex.jpg...');
+          await enrollFromPublicPath('/enrollment/Foto_Alex.jpg');
+          addAlert('Enrollment loaded: Alex');
           log('✅ Enrollment saved to localStorage');
-          identityResult.textContent = '✅ Enrollment ready (Nathan)';
+          identityResult.textContent = '✅ Enrollment ready (Alex)';
           identityResult.style.color = '#16a34a';
           identityStatus.classList.add('active');
         }catch(e){
           log('❌ Enrollment failed: ' + (e.message || e));
-          addAlert('Failed to load enrollment. Make sure Foto_Nathan.jpg is in public/enrollment/');
+          addAlert('Failed to load enrollment. Make sure Foto_Alex.jpg is in public/enrollment/');
           identityStatus.classList.remove('active');
         }
       };

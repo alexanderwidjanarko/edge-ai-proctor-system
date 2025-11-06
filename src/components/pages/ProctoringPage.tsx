@@ -398,12 +398,16 @@ const ProctoringPage = () => {
                 </button>
                 <button className="btn-secondary" onClick={async () => {
                   try {
-                    await enrollFromPublicPath('/enrollment/Foto_Nathan.jpg')
+                    await enrollFromPublicPath('/enrollment/Foto_Alex.jpg')
                     const e = loadEnrollment()
-                    if (e?.displayName) setEnrolledName(e.displayName)
-                    alert('Enrollment loaded from /enrollment/Foto_Nathan.jpg')
+                    if (e) {
+                      const updated = { ...e, displayName: 'Alex' }
+                      localStorage.setItem('proctor:enrollment', JSON.stringify(updated))
+                      setEnrolledName(updated.displayName)
+                    }
+                    alert('Enrollment loaded from /enrollment/Foto_Alex.jpg')
                   } catch {
-                    alert('Put Foto_Nathan.jpg under public/enrollment first.')
+                    alert('Put Foto_Alex.jpg under public/enrollment first.')
                   }
                 }}>Load Default Enrollment</button>
               </div>

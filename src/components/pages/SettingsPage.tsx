@@ -197,7 +197,7 @@ const SettingsPage = () => {
                     />
                     <input
                       type="text"
-                      placeholder="Display name (contoh: Nathan)"
+                      placeholder="Display name (contoh: Alex)"
                       className="input-field"
                       value={enrollName}
                       onChange={(e) => setEnrollName(e.target.value)}
@@ -246,8 +246,8 @@ const SettingsPage = () => {
                       className="btn-secondary"
                       onClick={async () => {
                         try {
-                          await enrollFromPublicPath('/enrollment/Foto_Nathan.jpg')
-                          const nameFromFile = 'Nathan'
+                          await enrollFromPublicPath('/enrollment/Foto_Alex.jpg')
+                          const nameFromFile = 'Alex'
                           const current = loadEnrollment()
                           if (current) {
                             const updated = { ...current, displayName: enrollName || nameFromFile }
@@ -258,19 +258,19 @@ const SettingsPage = () => {
                             setEnrolledInfo({ hasData: true, name: enrollName || nameFromFile })
                             setEnrollName(enrollName || nameFromFile)
                           }
-                          alert('Enrollment loaded from /enrollment/Foto_Nathan.jpg')
+                          alert('Enrollment loaded from /enrollment/Foto_Alex.jpg')
                         } catch (e) {
-                          alert('Failed to load /enrollment/Foto_Nathan.jpg. Make sure the file exists under public/enrollment/')
+                          alert('Failed to load /enrollment/Foto_Alex.jpg. Make sure the file exists under public/enrollment/')
                         }
                       }}
                     >
-                      Load from public/enrollment/Foto_Nathan.jpg
+                      Load from public/enrollment/Foto_Alex.jpg
                     </button>
                     <div className="text-sm text-gray-600">
                       Status: {enrolledInfo?.hasData ? `Enrolled${enrolledInfo?.name ? ` as ${enrolledInfo.name}` : ''}` : 'Not enrolled'}
                     </div>
                     <div className="text-xs text-gray-500">
-                      Where to place default file? Put the image at <code>public/enrollment/Foto_Nathan.jpg</code> so the button above can import it. Stored locally under key <code>proctor:enrollment</code>.
+                      Where to place default file? Put the image at <code>public/enrollment/Foto_Alex.jpg</code> so the button above can import it. Stored locally under key <code>proctor:enrollment</code>.
                     </div>
                   </div>
                 </div>
